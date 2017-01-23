@@ -1,0 +1,38 @@
+A sample model (INPUTNAME.bil) is provided: 2000x2000 elevation data, with
+
+- 2-byte integer, little endian, in meters.
+- 10x10m resolution
+- Placed at 4080000 360000 UTM 30S ED50 (Malaga,Spain)
+
+Any other input model should have a square size (non-square sizes hasn't been considered)
+and changes to Defs.h may be required: i.e.
+
+xdim and dim
+xstep (scale)
+observer's height (meters)
+NTHREAD: architectural dependant
+BW: Related to L1cache size and ~sqrt(xdim)
+
+
+Usage: 
+
+0) Edit makefile and change compiler and options. Run make
+
+1) Run ./precomp.out initially, or if you change xdim to different value
+(that is, precomputed values in sort directory are 
+
+2) Run ./comp.out to build totalviewshed map. Results (in output folder) include:
+	- Raster data: INPUTNAME_sur.dat
+	- Image: INPUTNAME.png (Jet colormap from 0 to 10000Hm2)
+	- kml file: Overlay image in Google Earth
+
+The software includes kernels for:
+
+- Total Viewshed: This is the default kernel. The use of any other kernel is not recommended.
+- Volume: To compute total volumetric visibility
+- Vectorized surface: Total viewshed with vectorized kernel
+- Masked surface: Total viewshed with masked areas (Cell tower location algorithm)
+- Horizon: Horizon computation (excluded in this version)
+- Empty kernel: For timing
+- Single viewshed kernel (Cell tower location algorithm)
+- 
