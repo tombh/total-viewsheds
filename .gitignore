@@ -1,0 +1,10 @@
+etc/sort/*
+etc/output/*
+etc/rsector/*
+etc/bin/*
+
+include/*
+
+*.log
+*.out
+*.o
