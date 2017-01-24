@@ -11,13 +11,9 @@
 
 #include "../src/DEM.h"
 
-void graceful_exit(int signal)
-{
-  exit(1);
-}
+void graceful_exit(int signal) { exit(1); }
 
-int main(int argc, char* const argv[])
-{
+int main(int argc, char* const argv[]) {
   // global setup
   signal(SIGINT, graceful_exit);
   backward::SignalHandling sh;
@@ -29,4 +25,3 @@ int main(int argc, char* const argv[])
 
   return result;
 }
-

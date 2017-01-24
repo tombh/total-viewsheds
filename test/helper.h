@@ -1,7 +1,7 @@
 #include <iostream>
 
-#include <catch/catch.hpp>
 #include <plog/Log.h>
+#include <catch/catch.hpp>
 
 #include "fixtures.h"
 

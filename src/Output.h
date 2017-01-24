@@ -1,13 +1,13 @@
 #include <string>
 #include <vector>
 
-#include "definitions.h"
 #include "DEM.h"
+#include "definitions.h"
 
 namespace TVS {
 
 class Output {
-  public:
+ public:
   struct color {
     unsigned char R;
     unsigned char G;
@@ -26,7 +26,7 @@ class Output {
   std::string tvsToASCII();
   std::string viewshedToASCII(int);
 
-  private:
+ private:
   int size_of_palette;
   color palette[SIZE_OF_TVS_PNG_PALETTE];
 
@@ -34,10 +34,8 @@ class Output {
   color getColorFromGradient(int);
   void fillViewshedWithDots();
   void parseSectors();
-  void parseSectorPoints(FILE*);
+  void parseSectorPoints(FILE *);
   int readNextValue();
   int getNumberOfRingSectors();
- };
-
+};
 }
-

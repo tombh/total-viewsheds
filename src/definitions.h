@@ -82,7 +82,6 @@ const float PI_F = 3.14159265358979f;
 
 // The quality of the gradient used to create the final TVS PNG image
 const int SIZE_OF_TVS_PNG_PALETTE = 1024;
-
 }
 
 #endif

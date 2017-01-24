@@ -1,13 +1,10 @@
 #include "DEM.h"
 
-int main(int argc, char *argv[])
-{
-  if(argv[1] == "--precompute")
-  {
-    //mainPreCompute();
+int main(int argc, char *argv[]) {
+  if (argv[1] == "--precompute") {
+    // mainPreCompute();
   } else {
-    //mainCompute();
+    // mainCompute();
   }
-	exit(0);
+  exit(0);
 }
-

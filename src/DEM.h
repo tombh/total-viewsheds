@@ -1,5 +1,5 @@
-#include "definitions.h"
 #include "Sector.h"
+#include "definitions.h"
 
 #ifndef DEM_H
 #define DEM_H
@@ -9,7 +9,7 @@ namespace TVS {
 class DEM {
   struct color;
 
-  public:
+ public:
   double *heights;
   bool is_store_ring_sectors;
 
@@ -26,12 +26,11 @@ class DEM {
   void preCompute();
   void compute(bool = false);
 
-  private:
+ private:
   Sector sector;
   double dtime();
   double *readHeights();
 };
-
 }
 
 #endif
