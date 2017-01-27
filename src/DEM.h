@@ -1,35 +1,28 @@
-#include "Sector.h"
-#include "definitions.h"
-
 #ifndef DEM_H
 #define DEM_H
 
 namespace TVS {
 
 class DEM {
-  struct color;
-
  public:
-  double *heights;
   bool is_store_ring_sectors;
-
+  bool is_computing;
+  bool is_precomputing;
   int width;
   int height;
   int size;
   int scale;
-  int max_viewshed;
-  float tvs[DEM_SIZE];
-  float cumulative_surface[DEM_SIZE];
+  float *cumulative_surface;
 
-  explicit DEM();
-
-  void preCompute();
-  void compute(bool = false);
+  DEM();
+  ~DEM();
+  void writeTVSOutput();
+  float maxViewshedValue();
+  float minViewshedValue();
+  void compute();
 
  private:
-  Sector sector;
   double dtime();
-  double *readHeights();
 };
 }
 

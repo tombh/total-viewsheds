@@ -3,10 +3,10 @@
 #include <lodepng/lodepng.h>
 #include <plog/Log.h>
 
+#include "definitions.h"
 #include "DEM.h"
 #include "Output.h"
 #include "Sector.h"
-#include "definitions.h"
 
 namespace TVS {
 
@@ -16,7 +16,7 @@ Output::Output(DEM &dem) : dem(dem) {}
 void Output::tvsResults() {
   FILE *fs;
   LOG_INFO << "Writing TVS results to file.";
-  fs = fopen(TVS_RESULTS_FILE, "wb");
+  fs = fopen(TVS_RESULTS_FILE.c_str(), "wb");
   fwrite(this->dem.cumulative_surface, this->dem.size, 4, fs);
   fclose(fs);
 }
@@ -24,7 +24,7 @@ void Output::tvsResults() {
 float Output::readTVSFile() {
   float tvs_data[this->dem.size];
   float tvs_value;
-  FILE *tvs_file = fopen(TVS_RESULTS_FILE, "rb");
+  FILE *tvs_file = fopen(TVS_RESULTS_FILE.c_str(), "rb");
   for (int point = 0; point < this->dem.size; point++) {
     fread(&tvs_value, 4, 1, tvs_file);
     tvs_data[point] = tvs_value;
@@ -36,21 +36,25 @@ float Output::readTVSFile() {
 // Convert computed TVS data into a PNG image. The resulting PNG has the same
 // resolution as the DEM.
 void Output::tvsToPNG() {
-  for (int i = 0; i < SIZE_OF_TVS_PNG_PALETTE; i++) {
+  this->palette = new color[FLAGS_size_of_tvs_png_palette];
+  for (int i = 0; i < FLAGS_size_of_tvs_png_palette; i++) {
     this->palette[i] = this->getColorFromGradient(i);
   }
   std::vector<unsigned char> image = this->tvsArrayToPNGVect();
   lodepng::encode(TVS_PNG_FILE, image, this->dem.width, this->dem.height);
+  delete [] this->palette;
 }
 
 std::vector<unsigned char> Output::tvsArrayToPNGVect() {
   std::vector<unsigned char> image;
-  float max_value = this->dem.tvs[this->dem.max_viewshed];
+  float max_value = this->dem.maxViewshedValue();
+  float min_value = this->dem.minViewshedValue();
+  float range = max_value - min_value;
   image.resize(this->dem.width * this->dem.height * 4);
   for (unsigned i = 0; i < this->dem.size; i++) {
-    int v = (float)size_of_palette * (this->dem.tvs[i] / max_value);
+    int v = (float)FLAGS_size_of_tvs_png_palette * ((this->dem.cumulative_surface[i] - min_value) / (range));
     if (v < 0) v = 0;
-    if (v > SIZE_OF_TVS_PNG_PALETTE - 1) v = SIZE_OF_TVS_PNG_PALETTE - 1;
+    if (v > FLAGS_size_of_tvs_png_palette - 1) v = FLAGS_size_of_tvs_png_palette - 1;
     image[4 * i + 0] = this->palette[v].R;
     image[4 * i + 1] = this->palette[v].G;
     image[4 * i + 2] = this->palette[v].B;
@@ -78,7 +82,7 @@ std::string Output::tvsToASCII() {
 
 Output::color Output::getColorFromGradient(int index) {
   float position = index;
-  float size = SIZE_OF_TVS_PNG_PALETTE;
+  float size = FLAGS_size_of_tvs_png_palette;
   Output::color c = {255, 255, 255};  // white
   if (position < (0.25 * size)) {
     c.R = 0;
@@ -98,6 +102,7 @@ Output::color Output::getColorFromGradient(int index) {
 
 std::string Output::viewshedToASCII(int viewer) {
   std::string viewshed_as_text;
+  this->viewshed = new std::string[this->dem.size];
   this->viewer = viewer;
   this->fillViewshedWithDots();
   this->parseSectors();
@@ -108,18 +113,19 @@ std::string Output::viewshedToASCII(int viewer) {
       viewshed_as_text += "\n";
   }
 
+  delete [] this->viewshed;
   return viewshed_as_text;
 }
 
 void Output::fillViewshedWithDots() {
   for (int point = 0; point < this->dem.size; point++) {
-    viewshed[point] = ". ";
+    this->viewshed[point] = ". ";
   }
 }
 
 void Output::parseSectors() {
   char path_ptr[100];
-  for (int sector_angle = 0; sector_angle < TOTAL_SECTORS; sector_angle++) {
+  for (int sector_angle = 0; sector_angle < FLAGS_total_sectors; sector_angle++) {
     Sector::ringSectorDataPath(path_ptr, sector_angle);
     this->sector_file = fopen(path_ptr, "rb");
     parseSectorPoints(this->sector_file);

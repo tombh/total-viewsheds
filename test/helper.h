@@ -12,6 +12,7 @@ namespace TVS {};
 using namespace TVS;
 
 void createMockDEM(const int dem[]);
+std::string exec(const char *cmd);
 void setup();
 void tearDown();
 

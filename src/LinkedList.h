@@ -6,13 +6,10 @@ class LinkedList {
   struct node {
     // Identifier of point.
     int idx;
-
     // Order in terms of orthogonal ditance from band of sight central axis.
     int oa;
-
     //	height of point in DEM (scaled relative to 1 unit of each DEM)
     float h;
-
     // Distance from point of view
     float d;
   };
@@ -36,6 +33,7 @@ class LinkedList {
 
   LinkedList();       // Create de Linked List
   LinkedList(int x);  // Create de Linked List with size x
+  ~LinkedList();
   void Clear();       // Initializing the Linked list and the first node
   void move_queue(bool movehead, bool movetail);  // Circular queue behavior
   int Next(int j);  // Return which is the next node

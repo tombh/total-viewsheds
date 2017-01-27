@@ -2,9 +2,11 @@ etc/sort/*
 etc/output/*
 etc/rsector/*
 etc/bin/*
+test/etc
 
 include/*
 
+*.bil
 *.log
 *.out
 *.o

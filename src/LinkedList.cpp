@@ -1,4 +1,5 @@
 #include "LinkedList.h"
+#include <plog/Log.h>
 
 LinkedList::LinkedList() {}
 
@@ -13,6 +14,11 @@ LinkedList::LinkedList(int x) {
   Last = 0;
   LL[0].next = -1;
   LL[0].prev = -2;
+}
+
+LinkedList::~LinkedList() {
+  // TODO: Find out who is depending on LL apart from Sector::band_of_sight.
+  //delete [] LL;
 }
 
 void LinkedList::Clear() {

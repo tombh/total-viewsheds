@@ -1,6 +1,7 @@
 #include <string>
 
 #include "LinkedList.h"
+#include "DEM.h"
 
 #ifndef SECTOR_H
 #define SECTOR_H
@@ -9,6 +10,8 @@ namespace TVS {
 
 class Sector {
  public:
+  DEM &dem;
+
   FILE *precomputed_data_file;
 
   int sector_angle;
@@ -20,9 +23,12 @@ class Sector {
   int bw;                    // Size windows sweep
   int hbw;                   // Size Windows sweep/2
   LinkedList band_of_sight;  // Linked list used
+  int band_size;
+  int half_band_size;
 
   bool is_store_ring_sectors;
-  bool is_precomputing;
+
+  double scaled_observer_height;
 
   char *precomputed_data_path;
   char *ring_sector_data_path;
@@ -31,6 +37,7 @@ class Sector {
 
   double origin;                      // The angle windows sweep used
   double sect_angle;                  // The angle windows sweep of sector used
+  double shift_angle;
   double *isin, *icos, *icot, *itan;  // Trigonometric variable
   int *tmp1, *tmp2;                   // Temporal poninters
 
@@ -78,7 +85,7 @@ class Sector {
   int nrsF;          // Number ring sector to right point
   int nrsB;          // Number ting sector to left point
 
-  Sector(bool = false);  // Create Sector.
+  Sector(DEM&);  // Create Sector.
   ~Sector();             // dISPOSE Sector.
 
   void pre_computed_sin();        // Calculate  the trigonometric variable sino
@@ -86,7 +93,7 @@ class Sector {
   void setDistances(int sector);  // Calculated distance from the axis starting
 
   // Gives each node its natural position and elevation
-  void setHeights(double*);
+  void setHeights();
   void presort();  // Ordering  based paper
   void sort();     // Ordering  based paper
 

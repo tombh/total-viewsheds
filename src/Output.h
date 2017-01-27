@@ -2,7 +2,6 @@
 #include <vector>
 
 #include "DEM.h"
-#include "definitions.h"
 
 namespace TVS {
 
@@ -15,9 +14,9 @@ class Output {
   };
 
   DEM &dem;
-  std::string viewshed[DEM_SIZE];
   int viewer;
   FILE *sector_file;
+  std::string *viewshed;
 
   Output(DEM &dem);
   void tvsResults();
@@ -27,8 +26,7 @@ class Output {
   std::string viewshedToASCII(int);
 
  private:
-  int size_of_palette;
-  color palette[SIZE_OF_TVS_PNG_PALETTE];
+  color *palette;
 
   std::vector<unsigned char> tvsArrayToPNGVect();
   color getColorFromGradient(int);

@@ -2,62 +2,107 @@
 
 #include <plog/Log.h>
 
-#include "Sector.h"
 #include "definitions.h"
+#include "DEM.h"
+#include "Sector.h"
 
 namespace TVS {
 
-Sector::Sector(bool is_precomputing) : is_precomputing(is_precomputing) {}
+Sector::Sector(DEM &dem)
+    : dem(dem),
+      // Size of the Band of Sight
+      band_size(FLAGS_dem_width),
+      half_band_size((band_size - 1) / 2),
+      // TODO: Explain all this somwhere
+      shift_angle(FLAGS_sector_shift),
+      // Scaling all measurements to a single unit of the DEM_SCALE makes
+      // calculations simpler.
+      // TODO: I think this could be a problem when considering DEM's without
+      // curved earth projections?
+      scaled_observer_height(FLAGS_observer_height / dem.scale)
+  {}
 
 void Sector::init_storage() {
-  this->nodes = new LinkedList::node[DEM_SIZE];
-  this->band_of_sight = LinkedList(BAND_SIZE);
+  this->nodes = new LinkedList::node[this->dem.size];
+  this->band_of_sight = LinkedList(this->band_size);
 
-  this->isin = new double[DEM_SIZE];
-  this->icos = new double[DEM_SIZE];
-  this->icot = new double[DEM_SIZE];
-  this->itan = new double[DEM_SIZE];
+  this->isin = new double[this->dem.size];
+  this->icos = new double[this->dem.size];
+  this->icot = new double[this->dem.size];
+  this->itan = new double[this->dem.size];
 
-  this->orderiAT = new int[DEM_SIZE];
-  this->tmp1 = new int[DEM_SIZE];
-  this->tmp2 = new int[DEM_SIZE];
-  if (!this->is_precomputing) {
-    surfaceF = new float[DEM_SIZE];
-    surfaceB = new float[DEM_SIZE];
-    if (IS_STORE_RING_SECTORS) {
-      rsectorF = new int *[DEM_SIZE];
-      rsectorB = new int *[DEM_SIZE];
-      size_dsF = new unsigned short[DEM_SIZE];
-      size_dsB = new unsigned short[DEM_SIZE];
+  this->orderiAT = new int[this->dem.size];
+  this->tmp1 = new int[this->dem.size];
+  this->tmp2 = new int[this->dem.size];
+  if (this->dem.is_computing) {
+    this->surfaceF = new float[this->dem.size];
+    this->surfaceB = new float[this->dem.size];
+    // TODO: sometimes surfaceB doesn't get any surface for
+    // some points. Is this reasonable or a bug, perhaps in
+    // absent nodes from the line of sight?
+    // So for now, just initialise all items to 0
+    for(int point = 0; point < this->dem.size; point++){
+      this->surfaceF[point] = 0;
+      this->surfaceB[point] = 0;
+    }
+    if (FLAGS_is_store_ring_sectors) {
+      this->rsectorF = new int *[this->dem.size];
+      this->rsectorB = new int *[this->dem.size];
+      this->size_dsF = new unsigned short[this->dem.size];
+      this->size_dsB = new unsigned short[this->dem.size];
     }
   }
 }
 
-void Sector::setHeights(double *heights) {
-  for (int point = 0; point < DEM_SIZE; point++) {
-    this->nodes[point].idx = point;
-    this->nodes[point].h = (float)heights[point];  // decameters
+Sector::~Sector() {
+  delete[] this->nodes;
+
+  // TODO: it should be LinkedList's responsibility to delete this.
+  // But using LinkedList's destructor causes LL to be deleted prematurely.
+  delete[] this->band_of_sight.LL;
+
+  delete[] this->isin;
+  delete[] this->icos;
+  delete[] this->icot;
+  delete[] this->itan;
+
+  delete[] this->orderiAT;
+  delete[] this->tmp1;
+  delete[] this->tmp2;
+
+  if (this->dem.is_computing) {
+    delete[] this->surfaceF;
+    delete[] this->surfaceB;
+    if (FLAGS_is_store_ring_sectors) {
+      delete[] this->rsectorF;
+      delete[] this->rsectorB;
+      delete[] this->size_dsF;
+      delete[] this->size_dsB;
+    }
   }
 }
 
-Sector::~Sector() {
-  delete[] isin;
-  delete[] icos;
-  delete[] icot;
-  delete[] itan;
+void Sector::setHeights() {
+  FILE *f;
+  unsigned short num;
+  f = fopen(INPUT_DEM_FILE.c_str(), "rb");
+  if (f == NULL) {
+    LOG_ERROR << "Error opening: " << INPUT_DEM_FILE;
+  } else {
+    for (int point = 0; point < this->dem.size; point++) {
+      this->nodes[point].idx = point;
 
-  delete[] orderiAT;
-  delete[] tmp1;
-  delete[] tmp2;
+      fread(&num, 2, 1, f);
 
-  if (!this->is_precomputing) {
-    delete[] surfaceF;
-    delete[] surfaceB;
-    if (IS_STORE_RING_SECTORS) {
-      delete[] rsectorF;
-      delete[] rsectorB;
-      delete[] size_dsF;
-      delete[] size_dsB;
+      // Original reading does this funny geometric translation...
+      // It's like the DEM is a piece of paper and you flip the top-right corner
+      // to the bottom-left. But why!?
+      // h[i/xdim+ydim*(i%xdim)] = num/SCALE; //internal representation from top
+      // to row.
+
+      // Why divide by SCALE? Is it multiplied in again later for the total
+      // viewshed surface area calculation?
+      this->nodes[point].h = (float)num / this->dem.scale;  // decameters
     }
   }
 }
@@ -67,10 +112,10 @@ void Sector::loopThroughBands(int sector_angle) {
   this->sector_angle = sector_angle;
   this->openPreComputedDataFile();
   this->changeAngle();
-  for (int point = 0; point < DEM_SIZE - 1; point++) {
-    this->PoV = point % BAND_SIZE;
+  for (int point = 0; point < this->dem.size - 1; point++) {
+    this->PoV = point % this->band_size;
     this->sweepS(point);
-    if (!this->is_precomputing) this->storers(this->orderiAT[point]);
+    if (this->dem.is_computing) this->storers(this->orderiAT[point]);
     post_loop(point);
   }
   fclose(this->precomputed_data_file);
@@ -92,7 +137,7 @@ void Sector::openPreComputedDataFile() {
   const char *mode;
   char path[100];
   this->preComputedDataPath(path, this->sector_angle);
-  if (this->is_precomputing) {
+  if (this->dem.is_precomputing) {
     mode = "wb";
   } else {
     mode = "rb";
@@ -109,7 +154,7 @@ void Sector::pre_computed_sin() {
   double ac;
   double s, c, ct, tn;
 
-  ac = (SECTOR_SHIFT + this->sector_angle + 0.5) * TO_RADIANS;
+  ac = (this->shift_angle + this->sector_angle + 0.5) * TO_RADIANS;
   this->sect_angle = ac;
   s = std::sin(this->sect_angle);
   c = std::cos(this->sect_angle);
@@ -117,7 +162,7 @@ void Sector::pre_computed_sin() {
   ct = 1 / tn;
 
   // O(N^2)
-  for (int i = 0; i < DEM_SIZE; i++) {
+  for (int i = 0; i < this->dem.size; i++) {
     this->isin[i] = i * s;
     this->icos[i] = i * c;
     this->icot[i] = i * ct;
@@ -129,11 +174,11 @@ void Sector::pre_computed_sin() {
 // O(N^2)
 void Sector::setDistances(int sector) {
   double val;
-  for (int j = 0; j < DEM_WIDTH; j++)
-    for (int i = 0; i < DEM_HEIGHT; i++) {
+  for (int j = 0; j < this->dem.width; j++)
+    for (int i = 0; i < this->dem.height; i++) {
       val = icos[j] + isin[i];
       if (quad == 1) val = icos[i] - isin[j];
-      nodes[j * DEM_HEIGHT + i].d = val;
+      nodes[j * this->dem.height + i].d = val;
     }
 }
 
@@ -144,69 +189,68 @@ void Sector::presort() {
 
   tn = std::tan(this->sect_angle);
   ct = 1 / tn;
-  // O(N^2) CRITICAL
-  for (int j = 1; j < DEM_WIDTH; j++) {
+  // O(N^2)
+  for (int j = 1; j < this->dem.width; j++) {
     this->tmp1[j] =
-        this->tmp1[j - 1] + (int)std::min(DEM_HEIGHT, (int)floor(ct * j));
+        this->tmp1[j - 1] + (int)std::min(this->dem.height, (int)floor(ct * j));
   }
-  // O(N^2) CRITICAL
-  for (int i = 1; i < DEM_HEIGHT; i++) {
+  // O(N^2)
+  for (int i = 1; i < this->dem.height; i++) {
     this->tmp2[i] =
-        this->tmp2[i - 1] + (int)std::min(DEM_WIDTH, (int)floor(tn * i));
+        this->tmp2[i - 1] + (int)std::min(this->dem.width, (int)floor(tn * i));
   }
 }
 
 // O(N^2)
 void Sector::sort() {
   this->presort();
-  double lx = DEM_WIDTH - 1;
-  double ly = DEM_HEIGHT - 1;
+  double lx = this->dem.width - 1;
+  double ly = this->dem.height - 1;
   double x, y;
   int ind, xx, yy, p, np;
-  for (int j = 1; j <= DEM_WIDTH; j++) {
+  for (int j = 1; j <= this->dem.width; j++) {
     x = (j - 1);
-    for (int i = 1; i <= DEM_HEIGHT; i++) {
+    for (int i = 1; i <= this->dem.height; i++) {
       y = (i - 1);
       ind = i * j;
       ind += ((ly - y) < (icot[j - 1]))
-                 ? ((DEM_HEIGHT - i) * j - this->tmp2[DEM_HEIGHT - i] -
-                    (DEM_HEIGHT - i))
+                 ? ((this->dem.height - i) * j - this->tmp2[this->dem.height - i] -
+                    (this->dem.height - i))
                  : this->tmp1[j - 1];
       ind += ((lx - x) < (itan[i - 1]))
-                 ? ((DEM_WIDTH - j) * i - this->tmp1[DEM_WIDTH - j] -
-                    (DEM_WIDTH - j))
+                 ? ((this->dem.width - j) * i - this->tmp1[this->dem.width - j] -
+                    (this->dem.width - j))
                  : this->tmp2[i - 1];
       xx = j - 1;
       yy = i - 1;
-      p = xx * DEM_HEIGHT + yy;
-      np = (DEM_WIDTH - 1 - yy) * DEM_HEIGHT + xx;
+      p = xx * this->dem.height + yy;
+      np = (this->dem.width - 1 - yy) * this->dem.height + xx;
       if (this->quad == 0) {
         this->nodes[p].oa = ind - 1;
         this->orderiAT[ind - 1] = np;
       } else {
         this->nodes[np].oa = ind - 1;
-        this->orderiAT[DEM_SIZE - ind] = p;
+        this->orderiAT[this->dem.size - ind] = p;
       }
     }
   }
 }
 
 void Sector::post_loop(int point) {
-  // Is the band of sight is starting to be populated?
-  bool starting = (point < HALF_BAND_SIZE);
-  // Is the band of sight coming to ending, therefore emptying?
-  bool ending = (point >= (DEM_SIZE - HALF_BAND_SIZE - 1));
+  // Is the band of sight starting to be populated?
+  bool starting = (point < this->half_band_size);
+  // Is the band of sight coming to an ending, therefore emptying?
+  bool ending = (point >= (this->dem.size - this->half_band_size - 1));
 
   this->atright = false;
   this->atright_trans = false;
   this->NEW_position = -1;
   this->NEW_position_trans = -1;
   LinkedList::node tmp = this->newnode_trans;
-
   if (!ending) {
     this->newnode =
         this->nodes[this->orderiAT[starting ? 2 * point + 1
-                                            : HALF_BAND_SIZE + point + 1]];
+                                            : this->half_band_size + point + 1]];
     this->atright =
         this->newnode.oa > this->band_of_sight.LL[this->PoV].Value.oa;
   }
@@ -216,7 +260,7 @@ void Sector::post_loop(int point) {
         this->newnode_trans.oa > this->band_of_sight.LL[this->PoV].Value.oa;
   }
 
-  if (!this->is_precomputing) {
+  if (!this->dem.is_precomputing) {
     if (!ending) {
       fread(&this->NEW_position, 4, 1, this->precomputed_data_file);
       this->insert_node(this->newnode, this->NEW_position, !starting);
@@ -229,7 +273,7 @@ void Sector::post_loop(int point) {
     if (!starting && !ending) {
       this->newnode =
           this->nodes[this->orderiAT[starting ? 2 * point + 1
-                                              : HALF_BAND_SIZE + point + 1]];
+                                              : this->half_band_size + point + 1]];
       this->NEW_position = -1;
       this->atright =
           this->newnode.oa > this->band_of_sight.LL[this->PoV].Value.oa;
@@ -263,6 +307,7 @@ void Sector::calcule_pos_newnode(bool remove) {
   } else {
     sweep = this->band_of_sight.LL[this->band_of_sight.First].next;
     bool go_on = true;
+
     do {
       if (newnode.oa < this->band_of_sight.LL[sweep].Value.oa) {
         NEW_position = this->band_of_sight.LL[sweep].prev;
@@ -290,22 +335,22 @@ void Sector::insert_node(LinkedList::node newnode, int position, bool remove) {
 
 // Fulldata to store ring sector topology
 void Sector::storers(int i) {
-  float surscale = PI_F / (360 * DEM_SCALE * DEM_SCALE);  // hectometers^2
+  float surscale = PI_F / (360 * this->dem.scale * this->dem.scale);  // hectometers^2
   this->surfaceF[i] = this->sur_dataF * surscale;
   this->surfaceB[i] = this->sur_dataB * surscale;
 
-  if (IS_STORE_RING_SECTORS) {
-    rsectorF[i] = new int[nrsF * 2];
-    rsectorB[i] = new int[nrsB * 2];
-    size_dsF[i] = 2 * nrsF;
-    size_dsB[i] = 2 * nrsB;
-    for (int j = 0; j < nrsF; j++) {
-      rsectorF[i][2 * j + 0] = rsF[j][0];
-      rsectorF[i][2 * j + 1] = rsF[j][1];
+  if (FLAGS_is_store_ring_sectors) {
+    this->rsectorF[i] = new int[this->nrsF * 2];
+    this->rsectorB[i] = new int[this->nrsB * 2];
+    this->size_dsF[i] = 2 * this->nrsF;
+    this->size_dsB[i] = 2 * this->nrsB;
+    for (int j = 0; j < this->nrsF; j++) {
+      this->rsectorF[i][2 * j + 0] = this->rsF[j][0];
+      this->rsectorF[i][2 * j + 1] = this->rsF[j][1];
     }
     for (int j = 0; j < nrsB; j++) {
-      rsectorB[i][2 * j + 0] = rsB[j][0];
-      rsectorB[i][2 * j + 1] = rsB[j][1];
+      this->rsectorB[i][2 * j + 0] = this->rsB[j][0];
+      this->rsectorB[i][2 * j + 1] = this->rsB[j][1];
     }
   }
 }
@@ -319,12 +364,12 @@ void Sector::recordsectorRS() {
   this->ringSectorDataPath(path_ptr, this->sector_angle);
   fs = fopen(path_ptr, "wb");
 
-  this->rsectorF[orderiAT[DEM_SIZE - 1]] = new int[0];
-  this->rsectorB[orderiAT[DEM_SIZE - 1]] = new int[0];
-  this->size_dsB[orderiAT[DEM_SIZE - 1]] = 0;
-  this->size_dsF[orderiAT[DEM_SIZE - 1]] = 0;
+  this->rsectorF[orderiAT[this->dem.size - 1]] = new int[0];
+  this->rsectorB[orderiAT[this->dem.size - 1]] = new int[0];
+  this->size_dsB[orderiAT[this->dem.size - 1]] = 0;
+  this->size_dsF[orderiAT[this->dem.size - 1]] = 0;
 
-  for (int point = 0; point < DEM_SIZE; point++) {
+  for (int point = 0; point < this->dem.size; point++) {
     no_of_ring_sectors = size_dsF[point];
     // Every point in the DEM gets a marker saying how much of the proceeding
     // bytes will have ring sector data in them.
@@ -342,9 +387,9 @@ void Sector::recordsectorRS() {
 
   fclose(fs);
 
-  for (int point = 0; point < DEM_SIZE; point++) {
-    delete this->rsectorF[point];
-    delete this->rsectorB[point];
+  for (int point = 0; point < this->dem.size; point++) {
+    delete[] this->rsectorF[point];
+    delete[] this->rsectorB[point];
   }
 }
 
@@ -353,80 +398,80 @@ void Sector::sweepS(int _not_used) {
   int sweep;
 
   float d = this->band_of_sight.LL[PoV].Value.d;
-  float h = this->band_of_sight.LL[PoV].Value.h + SCALED_OBSERVER_HEIGHT;
+  float h = this->band_of_sight.LL[PoV].Value.h + this->scaled_observer_height;
 
-  sweep = presweepF();
-  if (PoV != this->band_of_sight.Last) {
+  sweep = this->presweepF();
+  if (this->PoV != this->band_of_sight.Last) {
     while (sweep != -1) {
-      delta_d = this->band_of_sight.LL[sweep].Value.d - d;
-      delta_h = this->band_of_sight.LL[sweep].Value.h - h;
-      sweeppt = this->band_of_sight.LL[sweep].Value.idx;
-      kernelS(rsF, nrsF, sur_dataF);
+      this->delta_d = this->band_of_sight.LL[sweep].Value.d - d;
+      this->delta_h = this->band_of_sight.LL[sweep].Value.h - h;
+      this->sweeppt = this->band_of_sight.LL[sweep].Value.idx;
+      this->kernelS(this->rsF, this->nrsF, this->sur_dataF);
       sweep = this->band_of_sight.LL[sweep].next;
     }
   }
-  closeprof(visible, true, false, false);
+  this->closeprof(this->visible, true, false, false);
 
-  sweep = presweepB();
-  if (PoV != this->band_of_sight.First) {
+  sweep = this->presweepB();
+  if (this->PoV != this->band_of_sight.First) {
     while (sweep != -2) {
-      delta_d = d - this->band_of_sight.LL[sweep].Value.d;
-      delta_h = this->band_of_sight.LL[sweep].Value.h - h;
-      sweeppt = this->band_of_sight.LL[sweep].Value.idx;
-      kernelS(rsB, nrsB, sur_dataB);
+      this->delta_d = d - this->band_of_sight.LL[sweep].Value.d;
+      this->delta_h = this->band_of_sight.LL[sweep].Value.h - h;
+      this->sweeppt = this->band_of_sight.LL[sweep].Value.idx;
+      this->kernelS(this->rsB, this->nrsB, this->sur_dataB);
       sweep = this->band_of_sight.LL[sweep].prev;
     }
   }
-  closeprof(visible, false, false, false);
+  this->closeprof(this->visible, false, false, false);
 }
 
 // remember that rs could be &rsF or &rsB
 // O((BW + N)^2) CRITICAL
 void Sector::kernelS(int rs[][2], int &nrs, float &sur_data) {
-  float angle = delta_h / delta_d;
-  bool above = (angle > max_angle);
-  bool opening = above && (!visible);
-  bool closing = (!above) && (visible);
-  visible = above;
-  max_angle = std::max(angle, max_angle);
+  float angle = this->delta_h / this->delta_d;
+  bool above = (angle > this->max_angle);
+  bool opening = above && (!this->visible);
+  bool closing = (!above) && (this->visible);
+  this->visible = above;
+  this->max_angle = std::max(angle, this->max_angle);
   if (opening) {
-    open_delta_d = delta_d;
+    this->open_delta_d = this->delta_d;
     nrs++;
-    rs[nrs][0] = sweeppt;
+    rs[nrs][0] = this->sweeppt;
   }
   if (closing) {
-    sur_data += (delta_d * delta_d - open_delta_d * open_delta_d);
-    rs[nrs][1] = sweeppt;
+    sur_data += (this->delta_d * this->delta_d - this->open_delta_d * this->open_delta_d);
+    rs[nrs][1] = this->sweeppt;
   }
 }
 
 int Sector::presweepF() {
-  visible = true;
-  nrsF = 0;
-  sur_dataF = 0;
-  delta_d = 0;
-  delta_h = 0;
-  open_delta_d = 0;
-  open_delta_h = 0;
+  this->visible = true;
+  this->nrsF = 0;
+  this->sur_dataF = 0;
+  this->delta_d = 0;
+  this->delta_h = 0;
+  this->open_delta_d = 0;
+  this->open_delta_h = 0;
   int sweep = this->band_of_sight.LL[PoV].next;
-  sweeppt = this->band_of_sight.LL[PoV].Value.idx;
-  rsF[0][0] = sweeppt;
-  max_angle = -2000;
+  this->sweeppt = this->band_of_sight.LL[PoV].Value.idx;
+  this->rsF[0][0] = this->sweeppt;
+  this->max_angle = -2000;
   return sweep;
 }
 
 int Sector::presweepB() {
-  visible = true;
-  nrsB = 0;
-  sur_dataB = 0;
-  delta_d = 0;
-  delta_h = 0;
-  open_delta_d = 0;
-  open_delta_h = 0;
+  this->visible = true;
+  this->nrsB = 0;
+  this->sur_dataB = 0;
+  this->delta_d = 0;
+  this->delta_h = 0;
+  this->open_delta_d = 0;
+  this->open_delta_h = 0;
   int sweep = this->band_of_sight.LL[PoV].prev;
-  sweeppt = this->band_of_sight.LL[PoV].Value.idx;
-  rsB[0][0] = sweeppt;
-  max_angle = -2000;
+  this->sweeppt = this->band_of_sight.LL[PoV].Value.idx;
+  this->rsB[0][0] = sweeppt;
+  this->max_angle = -2000;
   return sweep;
 }
 
@@ -443,33 +488,33 @@ int Sector::presweepB() {
 // that point's surface to not be added to the total viewshed surface.
 void Sector::closeprof(bool visible, bool fwd, bool vol, bool full) {
   if (fwd) {
-    nrsF++;
+    this->nrsF++;
     if (visible) {
-      rsF[nrsF - 1][1] = sweeppt;
-      sur_dataF += delta_d * delta_d - open_delta_d * open_delta_d;
+      this->rsF[nrsF - 1][1] = this->sweeppt;
+      this->sur_dataF += this->delta_d * this->delta_d - this->open_delta_d * this->open_delta_d;
     }
 
     // I think this means, "discount bands of sight that contain only one ring
     // sector and where the PoV is close to the edge". But I don't know why and
     // also I don't know why the ring sector is removed but the surface area is
     // stil counted.
-    if ((nrsF == 1) && (delta_d < 1.5F)) nrsF = 0;
+    if ((this->nrsF == 1) && (this->delta_d < 1.5F)) this->nrsF = 0;
   } else {
-    nrsB++;
+    this->nrsB++;
     if (visible) {
-      rsB[nrsB - 1][1] = sweeppt;
-      sur_dataB += delta_d * delta_d - open_delta_d * open_delta_d;
+      this->rsB[this->nrsB - 1][1] = this->sweeppt;
+      this->sur_dataB += this->delta_d * this->delta_d - this->open_delta_d * this->open_delta_d;
     }
-    if ((nrsB == 1) && (delta_d < 1.5F)) nrsB = 0;  // safe data with small vs
+    if ((this->nrsB == 1) && (this->delta_d < 1.5F)) this->nrsB = 0;  // safe data with small vs
   }
 }
 
 void Sector::ringSectorDataPath(char *path_ptr, int sector_angle) {
-  sprintf(path_ptr, "%s%d.bin", RING_SECTOR_DIR, sector_angle);
+  sprintf(path_ptr, "%s/%d.bin", RING_SECTOR_DIR.c_str(), sector_angle);
 }
 
 void Sector::preComputedDataPath(char *path_ptr, int sector_angle) {
-  sprintf(path_ptr, "%s%d.bin", SECTOR_DIR, sector_angle);
+  sprintf(path_ptr, "%s/%d.bin", SECTOR_DIR.c_str(), sector_angle);
 }
 
 }  // namespace TVS

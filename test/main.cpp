@@ -1,27 +1,19 @@
-#include <signal.h>
-#include <stdio.h>
-
 #define CATCH_CONFIG_RUNNER
 #include <catch/catch.hpp>
 
 #define BACKWARD_HAS_BFD 1
 #include <backward-cpp/backward.hpp>
 
-#include <plog/Log.h>
+#include "../src/definitions.h"
+#include "../src/helper.h"
 
-#include "../src/DEM.h"
-
-void graceful_exit(int signal) { exit(1); }
-
-int main(int argc, char* const argv[]) {
-  // global setup
-  signal(SIGINT, graceful_exit);
+int main(int argc, char *argv[]) {
   backward::SignalHandling sh;
-  plog::init(plog::info, "tvs.log");
+
+  TVS::helper::init(argc, argv);
+  TVS::FLAGS_etc_dir = "./test/etc";
+  TVS::helper::buildPathStrings();
 
   int result = Catch::Session().run(argc, argv);
-
-  // global clean-up...
-
   return result;
 }

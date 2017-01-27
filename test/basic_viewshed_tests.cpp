@@ -1,5 +1,6 @@
 #include "helper.h"
 
+#include "../src/definitions.h"
 #include "../src/DEM.h"
 #include "../src/Output.h"
 #include "fixtures.h"
@@ -27,15 +28,19 @@
 // 000001111111111111111110000000000000
 
 std::string calculateViewshedFor(int viewer) {
-  setup();
+  FLAGS_is_store_ring_sectors = true;
   DEM dem = DEM();
-  Output output = Output(dem);
-  dem.preCompute();
+  FLAGS_is_precompute = true;
   dem.compute();
+  FLAGS_is_precompute = false;
+  dem.compute();
+  Output output = Output(dem);
   return output.viewshedToASCII(viewer);
 }
 
 SCENARIO("Basic viewsheds") {
+  setup();
+
   GIVEN("A DEM with a symmetrical mountain summit in the middle") {
     createMockDEM(fixtures::mountainDEM);
 

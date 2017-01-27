@@ -9,8 +9,9 @@ else
   CXX = g++
 endif
 
-CFLAGS += -openmp -O3 -g
-LDFLAGS = -L. -openmp -O3
+CFLAGS += -std=c++11 -openmp -O3 -g
+LDFLAGS = -std=c++11 -L. -openmp -O3
+LINKER_FLAGS = include/gflags/libgflags.a -lpthread
 
 APPS = tvs tvs-test
 
@@ -62,24 +63,33 @@ define getLibFromGithub
 	fi
 endef
 
+# Compile and install gflags
+define installGflags
+	@if [ -f include/gflags/README.md ]; then \
+		cd include/gflags && mkdir build && cd build && cmake .. && make && cd ../..; \
+		mv gflags gflags_tmp && mkdir gflags; \
+		mv gflags_tmp/build/include/gflags/* gflags; \
+		mv gflags_tmp/build/lib/libgflags.a gflags/libgflags.a; \
+		rm -rf gflags_tmp; \
+	fi
+endef
+
 all: download-libs $(APPS)
 
 tvs: $(DEP_OBJS) src/main.o
-	$(CXX) $(LDFLAGS) $^ -o $(BIN_DIR)/$@
+	$(CXX) $(LDFLAGS) $^ -o $(BIN_DIR)/$@ $(LINKER_FLAGS)
 
 tvs-test: $(TEST_OBJS) $(DEP_OBJS)
 	@# bfd provides full file/line backtraces (used by catch.hpp)
-	$(CXX) $(LDFLAGS) $^ -o $(BIN_DIR)/$@ -lbfd
+	$(CXX) $(LDFLAGS) $^ -o $(BIN_DIR)/$@ $(LINKER_FLAGS) -lbfd
 
 download-libs:
 	$(call getLibFromGithub,SergiusTheBest/plog,e82f39a,include/plog)
 	$(call getLibFromGithub,bombela/backward-cpp,7693dd9,backward.hpp)
-	$(call getLibFromGithub,philsquared/catch,2be372,single_include)
+	$(call getLibFromGithub,philsquared/catch,02a69b,single_include)
 	$(call getLibFromGithub,lvandeve/lodepng,8a0f16a,lodepng.h lodepng.cpp)
-	@# A horrible hack to comment out a line that prevents backward.hpp from being able to
-	@# receive SIGSEGV exceptions. See the following Github issue for progress:
-	@# https://github.com/philsquared/Catch/issues/611
-	@sed -e '/SIGSEGV/s/^/\/\//g' -i $(INCLUDE_DIR)/catch/catch.hpp;
+	$(call getLibFromGithub,gflags/gflags,30dbc81,.)
+	$(call installGflags)
 
 %.o: %.cpp
 	$(CXX) $(CFLAGS) -I $(INCLUDE_DIR) -c $< -o $@
