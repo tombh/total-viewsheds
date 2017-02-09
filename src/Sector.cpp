@@ -112,11 +112,13 @@ void Sector::loopThroughBands(int sector_angle) {
   this->sector_angle = sector_angle;
   this->openPreComputedDataFile();
   this->changeAngle();
-  for (int point = 0; point < this->dem.size - 1; point++) {
+  for (int point = 0; point < this->dem.size; point++) {
     this->PoV = point % this->band_size;
-    this->sweepS(point);
-    if (this->dem.is_computing) this->storers(this->orderiAT[point]);
-    post_loop(point);
+    if (this->dem.is_computing) {
+      this->sweepS(point);
+      this->storers(this->orderiAT[point]);
+    }
+    this->post_loop(point);
   }
   fclose(this->precomputed_data_file);
 }
@@ -161,7 +163,7 @@ void Sector::pre_computed_sin() {
   tn = std::tan(this->sect_angle);
   ct = 1 / tn;
 
-  // O(N^2)
+  // O(N)
   for (int i = 0; i < this->dem.size; i++) {
     this->isin[i] = i * s;
     this->icos[i] = i * c;
@@ -170,16 +172,17 @@ void Sector::pre_computed_sin() {
   }
 }
 
-// Distance to segment over point 0 (NW)
-// O(N^2)
+// Orthogonal distance of point relative to the initial point of the Band of Sight.
+// O(N)
 void Sector::setDistances(int sector) {
   double val;
-  for (int j = 0; j < this->dem.width; j++)
+  for (int j = 0; j < this->dem.width; j++) {
     for (int i = 0; i < this->dem.height; i++) {
       val = icos[j] + isin[i];
       if (quad == 1) val = icos[i] - isin[j];
       nodes[j * this->dem.height + i].d = val;
     }
+  }
 }
 
 void Sector::presort() {
@@ -189,18 +192,19 @@ void Sector::presort() {
 
   tn = std::tan(this->sect_angle);
   ct = 1 / tn;
-  // O(N^2)
+  // O(N)
   for (int j = 1; j < this->dem.width; j++) {
     this->tmp1[j] =
         this->tmp1[j - 1] + (int)std::min(this->dem.height, (int)floor(ct * j));
   }
-  // O(N^2)
+  // O(N)
   for (int i = 1; i < this->dem.height; i++) {
     this->tmp2[i] =
         this->tmp2[i - 1] + (int)std::min(this->dem.width, (int)floor(tn * i));
   }
 }
 
+// Sort DEM points in order of their distance from the initial Band of Sight line.
 // O(N^2)
 void Sector::sort() {
   this->presort();
@@ -307,6 +311,7 @@ void Sector::calcule_pos_newnode(bool remove) {
   } else {
     sweep = this->band_of_sight.LL[this->band_of_sight.First].next;
     bool go_on = true;
+    int sanity = 0;
 
     do {
       if (newnode.oa < this->band_of_sight.LL[sweep].Value.oa) {
@@ -315,8 +320,15 @@ void Sector::calcule_pos_newnode(bool remove) {
         fwrite(&NEW_position, 4, 1, this->precomputed_data_file);
         sweep = this->band_of_sight.LL[NEW_position].next;
         go_on = false;
-      } else
+      } else {
         sweep = this->band_of_sight.LL[sweep].next;
+        sanity++;
+        if(sanity > this->dem.size) {
+          LOGE << "newnode.oa: " << newnode.oa << " is bigger than anything in band of sight.";
+          //throw "Couldn't find position for new node";
+          go_on = false;
+        }
+      }
     } while (go_on);
   }
 }
@@ -396,11 +408,13 @@ void Sector::recordsectorRS() {
 // O(N^2)
 void Sector::sweepS(int _not_used) {
   int sweep;
+  int sanity;
 
   float d = this->band_of_sight.LL[PoV].Value.d;
   float h = this->band_of_sight.LL[PoV].Value.h + this->scaled_observer_height;
 
   sweep = this->presweepF();
+  sanity = 0;
   if (this->PoV != this->band_of_sight.Last) {
     while (sweep != -1) {
       this->delta_d = this->band_of_sight.LL[sweep].Value.d - d;
@@ -408,11 +422,17 @@ void Sector::sweepS(int _not_used) {
       this->sweeppt = this->band_of_sight.LL[sweep].Value.idx;
       this->kernelS(this->rsF, this->nrsF, this->sur_dataF);
       sweep = this->band_of_sight.LL[sweep].next;
+      sanity++;
+      if(sanity > this->dem.size) {
+        LOGE << "Forward Bos sweep searching forever";
+        throw "Forward BoS sweep didn't find -1";
+      }
     }
   }
   this->closeprof(this->visible, true, false, false);
 
   sweep = this->presweepB();
+  sanity = 0;
   if (this->PoV != this->band_of_sight.First) {
     while (sweep != -2) {
       this->delta_d = d - this->band_of_sight.LL[sweep].Value.d;
@@ -420,6 +440,11 @@ void Sector::sweepS(int _not_used) {
       this->sweeppt = this->band_of_sight.LL[sweep].Value.idx;
       this->kernelS(this->rsB, this->nrsB, this->sur_dataB);
       sweep = this->band_of_sight.LL[sweep].prev;
+      sanity++;
+      if(sanity > this->dem.size) {
+        LOGE << "Backward Bos sweep searching forever";
+        throw "Backward BoS sweep didn't find -2";
+      }
     }
   }
   this->closeprof(this->visible, false, false, false);

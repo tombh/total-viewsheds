@@ -4,10 +4,13 @@
 #include "../src/DEM.h"
 #include "../src/Output.h"
 
+// Using a md5sum isn't really cool for testing because it doesn't
+// indicate what went wrong if there's a mismatch. Hopefully the
+// things that could go wrong are covered by other tests.
 SCENARIO("Total Viewshed PNG output") {
   std::stringstream cmd;
   std::stringstream expected;
-  std::string current_md5_from_png = "4cbc36a362e380f4916c430619319f8f";
+  std::string current_md5_from_png = "48c285f34dce7039b4e037dcdc3c93fd";
 
   setup();
   createMockDEM(fixtures::mountainDEM);
