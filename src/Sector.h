@@ -12,34 +12,25 @@ class Sector {
  public:
   DEM &dem;
 
-  FILE *precomputed_data_file;
+  LinkedList::node *nodes;
+  LinkedList::node newnode;
+  LinkedList::node newnode_trans;
+  int *nodes_orth_ordered;
 
-  int sector_angle;
-
-  LinkedList::node *nodes;         // Pointer nodes
-  LinkedList::node newnode;        // New node of Linked List
-  LinkedList::node newnode_trans;  // transitory node
-
-  int bw;                    // Size windows sweep
-  int hbw;                   // Size Windows sweep/2
-  LinkedList band_of_sight;  // Linked list used
+  LinkedList band_of_sight;
   int band_size;
   int half_band_size;
 
+  FILE *precomputed_data_file;
+  char *precomputed_data_path;
+  char *ring_sector_data_path;
   bool is_store_ring_sectors;
 
   double scaled_observer_height;
 
-  char *precomputed_data_path;
-  char *ring_sector_data_path;
-
-  int *orderiAT;  // Pointers orderings
-
-  double origin;                      // The angle windows sweep used
-  double sect_angle;                  // The angle windows sweep of sector used
+  int sector_angle;
+  double origin;
   double shift_angle;
-  double *isin, *icos, *icot, *itan;  // Trigonometric variable
-  int *tmp1, *tmp2;                   // Temporal poninters
 
   int **rsectorF;            // Rings sector rigth nodes
   int **rsectorB;            // Ring sector left nodes
@@ -48,22 +39,14 @@ class Sector {
   float *surfaceF;
   float *surfaceB;
 
-  int quad;  // Quadrant of maps
+  int quad;
 
-  double obs_h;  // Height at which an observer is
-
-  bool foundn;        // Place to insert new node
-  bool foundn_trans;  // Place to insert nes node
-  bool foundd;        // Next dead
-  bool foundd_trans;  // Next dad
-  bool foundm;        // next main node
   bool atright;
   bool atright_trans;
 
   int NEW_position;        // Position new node
   int NEW_position_trans;  // Auxliary new position node
   int PoV;                 // Position actuallly node
-  int NextPOV;             // Next position node Linked List
 
   // Sweep variables
   float open_delta_d;
@@ -75,8 +58,6 @@ class Sector {
   float sur_dataB;
   float max_angle;
   int sweeppt;
-  // int sweep;
-  int cnt_vec;
 
   int rsF[1000][2];  // Temporal storage of visible ring sector up to 1000(large
                      // enough)
@@ -88,14 +69,10 @@ class Sector {
   Sector(DEM&);  // Create Sector.
   ~Sector();             // dISPOSE Sector.
 
-  void pre_computed_sin();        // Calculate  the trigonometric variable sino
   void changeAngle();             // Change the Sector of 0 to 179
-  void setDistances(int sector);  // Calculated distance from the axis starting
 
   // Gives each node its natural position and elevation
   void setHeights();
-  void presort();  // Ordering  based paper
-  void sort();     // Ordering  based paper
 
   void loopThroughBands(int);
   void post_loop(int);  // Operations after analysis

@@ -5,6 +5,7 @@
 #include "definitions.h"
 #include "DEM.h"
 #include "Sector.h"
+#include "SectorAxes.h"
 
 namespace TVS {
 
@@ -24,19 +25,13 @@ Sector::Sector(DEM &dem)
 
 void Sector::init_storage() {
   this->nodes = new LinkedList::node[this->dem.size];
+  this->nodes_orth_ordered = new int[this->dem.size];
   this->band_of_sight = LinkedList(this->band_size);
 
-  this->isin = new double[this->dem.size];
-  this->icos = new double[this->dem.size];
-  this->icot = new double[this->dem.size];
-  this->itan = new double[this->dem.size];
-
-  this->orderiAT = new int[this->dem.size];
-  this->tmp1 = new int[this->dem.size];
-  this->tmp2 = new int[this->dem.size];
   if (this->dem.is_computing) {
     this->surfaceF = new float[this->dem.size];
     this->surfaceB = new float[this->dem.size];
+
     // TODO: sometimes surfaceB doesn't get any surface for
     // some points. Is this reasonable or a bug, perhaps in
     // absent nodes from the line of sight?
@@ -45,6 +40,7 @@ void Sector::init_storage() {
       this->surfaceF[point] = 0;
       this->surfaceB[point] = 0;
     }
+
     if (FLAGS_is_store_ring_sectors) {
       this->rsectorF = new int *[this->dem.size];
       this->rsectorB = new int *[this->dem.size];
@@ -61,14 +57,7 @@ Sector::~Sector() {
   // But using LinkedList's destructor causes LL to be deleted prematurely.
   delete[] this->band_of_sight.LL;
 
-  delete[] this->isin;
-  delete[] this->icos;
-  delete[] this->icot;
-  delete[] this->itan;
-
-  delete[] this->orderiAT;
-  delete[] this->tmp1;
-  delete[] this->tmp2;
+  delete[] this->nodes_orth_ordered;
 
   if (this->dem.is_computing) {
     delete[] this->surfaceF;
@@ -116,7 +105,7 @@ void Sector::loopThroughBands(int sector_angle) {
     this->PoV = point % this->band_size;
     if (this->dem.is_computing) {
       this->sweepS(point);
-      this->storers(this->orderiAT[point]);
+      this->storers(this->nodes_orth_ordered[point]);
     }
     this->post_loop(point);
   }
@@ -126,13 +115,10 @@ void Sector::loopThroughBands(int sector_angle) {
 void Sector::changeAngle() {
   LOGD << "Changing sector angle to: " << this->sector_angle;
   this->quad = (this->sector_angle >= 90) ? 1 : 0;
-  if (this->quad == 1) this->sector_angle -= 90;
-  this->pre_computed_sin();
-  this->sort();
-  if (this->quad == 1) this->sector_angle += 90;
-  this->setDistances(this->sector_angle);
+  SectorAxes axes = SectorAxes(*this);
+  axes.adjust();
   this->band_of_sight.Clear();
-  this->band_of_sight.FirstNode(this->nodes[this->orderiAT[0]]);
+  this->band_of_sight.FirstNode(this->nodes[this->nodes_orth_ordered[0]]);
 }
 
 void Sector::openPreComputedDataFile() {
@@ -152,94 +138,6 @@ void Sector::openPreComputedDataFile() {
   }
 }
 
-void Sector::pre_computed_sin() {
-  double ac;
-  double s, c, ct, tn;
-
-  ac = (this->shift_angle + this->sector_angle + 0.5) * TO_RADIANS;
-  this->sect_angle = ac;
-  s = std::sin(this->sect_angle);
-  c = std::cos(this->sect_angle);
-  tn = std::tan(this->sect_angle);
-  ct = 1 / tn;
-
-  // O(N)
-  for (int i = 0; i < this->dem.size; i++) {
-    this->isin[i] = i * s;
-    this->icos[i] = i * c;
-    this->icot[i] = i * ct;
-    this->itan[i] = i * tn;
-  }
-}
-
-// Orthogonal distance of point relative to the initial point of the Band of Sight.
-// O(N)
-void Sector::setDistances(int sector) {
-  double val;
-  for (int j = 0; j < this->dem.width; j++) {
-    for (int i = 0; i < this->dem.height; i++) {
-      val = icos[j] + isin[i];
-      if (quad == 1) val = icos[i] - isin[j];
-      nodes[j * this->dem.height + i].d = val;
-    }
-  }
-}
-
-void Sector::presort() {
-  double ct, tn;
-  this->tmp1[0] = 0;
-  this->tmp2[0] = 0;
-
-  tn = std::tan(this->sect_angle);
-  ct = 1 / tn;
-  // O(N)
-  for (int j = 1; j < this->dem.width; j++) {
-    this->tmp1[j] =
-        this->tmp1[j - 1] + (int)std::min(this->dem.height, (int)floor(ct * j));
-  }
-  // O(N)
-  for (int i = 1; i < this->dem.height; i++) {
-    this->tmp2[i] =
-        this->tmp2[i - 1] + (int)std::min(this->dem.width, (int)floor(tn * i));
-  }
-}
-
-// Sort DEM points in order of their distance from the initial Band of Sight line.
-// O(N^2)
-void Sector::sort() {
-  this->presort();
-  double lx = this->dem.width - 1;
-  double ly = this->dem.height - 1;
-  double x, y;
-  int ind, xx, yy, p, np;
-  for (int j = 1; j <= this->dem.width; j++) {
-    x = (j - 1);
-    for (int i = 1; i <= this->dem.height; i++) {
-      y = (i - 1);
-      ind = i * j;
-      ind += ((ly - y) < (icot[j - 1]))
-                 ? ((this->dem.height - i) * j - this->tmp2[this->dem.height - i] -
-                    (this->dem.height - i))
-                 : this->tmp1[j - 1];
-      ind += ((lx - x) < (itan[i - 1]))
-                 ? ((this->dem.width - j) * i - this->tmp1[this->dem.width - j] -
-                    (this->dem.width - j))
-                 : this->tmp2[i - 1];
-      xx = j - 1;
-      yy = i - 1;
-      p = xx * this->dem.height + yy;
-      np = (this->dem.width - 1 - yy) * this->dem.height + xx;
-      if (this->quad == 0) {
-        this->nodes[p].oa = ind - 1;
-        this->orderiAT[ind - 1] = np;
-      } else {
-        this->nodes[np].oa = ind - 1;
-        this->orderiAT[this->dem.size - ind] = p;
-      }
-    }
-  }
-}
-
 void Sector::post_loop(int point) {
   // Is the band of sight starting to be populated?
   bool starting = (point < this->half_band_size);
@@ -253,13 +151,13 @@ void Sector::post_loop(int point) {
   LinkedList::node tmp = this->newnode_trans;
   if (!ending) {
     this->newnode =
-        this->nodes[this->orderiAT[starting ? 2 * point + 1
+        this->nodes[this->nodes_orth_ordered[starting ? 2 * point + 1
                                             : this->half_band_size + point + 1]];
     this->atright =
         this->newnode.oa > this->band_of_sight.LL[this->PoV].Value.oa;
   }
   if (starting) {
-    this->newnode_trans = this->nodes[this->orderiAT[2 * point + 2]];
+    this->newnode_trans = this->nodes[this->nodes_orth_ordered[2 * point + 2]];
     this->atright_trans =
         this->newnode_trans.oa > this->band_of_sight.LL[this->PoV].Value.oa;
   }
@@ -276,7 +174,7 @@ void Sector::post_loop(int point) {
   } else {
     if (!starting && !ending) {
       this->newnode =
-          this->nodes[this->orderiAT[starting ? 2 * point + 1
+          this->nodes[this->nodes_orth_ordered[starting ? 2 * point + 1
                                               : this->half_band_size + point + 1]];
       this->NEW_position = -1;
       this->atright =
@@ -284,11 +182,11 @@ void Sector::post_loop(int point) {
       this->calcule_pos_newnode(true);
     }
     if (starting) {
-      this->newnode = this->nodes[this->orderiAT[2 * point + 1]];
+      this->newnode = this->nodes[this->nodes_orth_ordered[2 * point + 1]];
       this->NEW_position = -1;
       this->atright = this->newnode.oa > this->band_of_sight.LL[PoV].Value.oa;
       this->calcule_pos_newnode(false);
-      this->newnode = this->nodes[this->orderiAT[2 * point + 2]];
+      this->newnode = this->nodes[this->nodes_orth_ordered[2 * point + 2]];
       this->atright =
           this->newnode.oa > this->band_of_sight.LL[this->PoV].Value.oa;
       this->calcule_pos_newnode(false);
@@ -325,7 +223,7 @@ void Sector::calcule_pos_newnode(bool remove) {
         sanity++;
         if(sanity > this->dem.size) {
           LOGE << "newnode.oa: " << newnode.oa << " is bigger than anything in band of sight.";
-          //throw "Couldn't find position for new node";
+          exit(1);
           go_on = false;
         }
       }
@@ -376,10 +274,10 @@ void Sector::recordsectorRS() {
   this->ringSectorDataPath(path_ptr, this->sector_angle);
   fs = fopen(path_ptr, "wb");
 
-  this->rsectorF[orderiAT[this->dem.size - 1]] = new int[0];
-  this->rsectorB[orderiAT[this->dem.size - 1]] = new int[0];
-  this->size_dsB[orderiAT[this->dem.size - 1]] = 0;
-  this->size_dsF[orderiAT[this->dem.size - 1]] = 0;
+  this->rsectorF[nodes_orth_ordered[this->dem.size - 1]] = new int[0];
+  this->rsectorB[nodes_orth_ordered[this->dem.size - 1]] = new int[0];
+  this->size_dsB[nodes_orth_ordered[this->dem.size - 1]] = 0;
+  this->size_dsF[nodes_orth_ordered[this->dem.size - 1]] = 0;
 
   for (int point = 0; point < this->dem.size; point++) {
     no_of_ring_sectors = size_dsF[point];

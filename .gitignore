@@ -10,3 +10,4 @@ include/*
 *.log
 *.out
 *.o
+vgcore.*
