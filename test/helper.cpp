@@ -10,6 +10,8 @@
 #include "../src/definitions.h"
 #include "../src/helper.h"
 #include "../src/DEM.h"
+#include "../src/Sector.h"
+#include "../src/Axes.h"
 #include "helper.h"
 
 // Create a fake DEM for testing purposes
@@ -56,5 +58,143 @@ void setup() {
 
 void tearDown() {
   emptyDirectories();
+}
+
+void computeDEMFor(DEM *dem, int angle) {
+  Axes axes = Axes(*dem);
+  axes.adjust(angle);
+}
+
+void setNodeIDs(DEM *dem) {
+  for (int point = 0; point < dem->size; point++) {
+    dem->nodes[point].idx = point;
+  }
+}
+
+std::string sectorOrderedDEMPointsToASCII(DEM *dem) {
+  std::stringstream out;
+  int inverted[dem->size];
+  for (int point = 0; point < dem->size; point++) {
+    inverted[dem->nodes_sector_ordered[point]] = point;
+  }
+  for (int point = 0; point < dem->size; point++) {
+    out << std::right << std::setw(3) << std::setfill(' ')
+      << std::to_string(inverted[point]);
+    if ((point % dem->width) == (dem->width - 1)) out << "\n";
+  }
+  out << "\n";
+  return out.str();
+}
+
+std::string sightOrderedDEMPointsToASCII(DEM *dem) {
+  std::stringstream out;
+  for (int point = 0; point < dem->size; point++) {
+    out << std::right << std::setw(3) << std::setfill(' ')
+      << std::to_string(dem->nodes[point].sight_ordered_index);
+    if ((point % dem->width) == (dem->width - 1)) out << "\n";
+  }
+  out << "\n";
+  return out.str();
+}
+
+std::string nodeDistancesToASCII(DEM *dem) {
+  std::stringstream out;
+  for (int point = 0; point < dem->size; point++) {
+    out << std::to_string(dem->nodes[point].d) << " ";
+    if ((point % dem->width) == (dem->width - 1)) out << "\n";
+  }
+  out << "\n";
+  return out.str();
+}
+
+void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
+  setNodeIDs(&sector->dem);
+  Axes axes = Axes(sector->dem);
+  axes.adjust(angle);
+  sector->dem.setToPrecompute();
+  sector->openPreComputedDataFile();
+  sector->bos_manager.setup(sector->precomputed_data_file);
+  if (ordering == "dem-indexed") bosLoopToDEMPoint(sector, point);
+  if (ordering == "sector-indexed") bosLoopToSectorPoint(sector, point);
+  fclose(sector->precomputed_data_file);
+}
+
+void bosLoopToDEMPoint(Sector *sector, int dem_point) {
+  for (int i = 0; i < sector->dem.size; i++) {
+    sector->bos_manager.adjustToNextPoint(i);
+    int idx = sector->bos_manager.bos.LL[sector->bos_manager.pov].Value.idx;
+    if(idx == dem_point) break;
+  }
+}
+
+void bosLoopToSectorPoint(Sector *sector, int sector_point) {
+  for (int i = 0; i < sector_point; i++) {
+    sector->bos_manager.adjustToNextPoint(i);
+  }
+}
+
+std::string bosToASCII(Sector *sector){
+  std::stringstream out;
+  out << std::fixed;
+  out.precision(5);
+  LinkedList::LinkedListNode node;
+  for(int i = 0; i < sector->bos_manager.bos.Count; i++){
+    node = sector->bos_manager.bos.LL[i];
+    out << std::left << std::setw(2) << i;
+    out << std::left << std::setw(3) << node.Value.idx;
+    out << std::left << std::setw(3) << node.Value.sight_ordered_index;
+    out << std::left << std::setw(8) << node.Value.d;
+    out << std::right << std::setw(3) << node.prev;
+    out << std::right << std::setw(3) << node.next << " ";
+    if(i == sector->bos_manager.pov) out << "P";
+    if(i == sector->bos_manager.bos.First) out << "F";
+    if(i == sector->bos_manager.bos.Last) out << "L";
+    if(i == sector->bos_manager.bos.Head) out << "H";
+    if(i == sector->bos_manager.bos.Tail) out << "T";
+    out << "\n";
+  }
+  return out.str();
+}
+
+std::string sweepToASCII(Sector *sector, std::string direction){
+  std::stringstream out;
+  LinkedList::LinkedListNode node;
+  int end;
+  int sweep = sector->bos_manager.pov;
+  if (direction == "forward") {
+    end = -1;
+  } else if (direction == "backward") {
+    end = -2;
+  } else {
+    LOGE << "Sweep direction neither forward nor backward";
+    exit(1);
+  }
+
+  while(sweep != end){
+    node = sector->bos_manager.bos.LL[sweep];
+    out << std::left << std::setw(3) << node.Value.idx;
+    out << std::left << std::setw(4) << node.Value.h;
+    out << "\n";
+    if (direction == "forward") {
+      sweep = node.next;
+    } else if (direction == "backward") {
+      sweep = node.prev;
+    }
+  }
+  return out.str();
+}
+
+void computeSweepFor(Compute *compute, std::string direction, int angle, int point) {
+  compute->sector.setHeights();
+  computeBOSFor(&compute->sector, angle, point, "dem-indexed");
+  compute->sector.sweepInit();
+  if (direction == "forward") {
+    compute->sector.sweepForward();
+  } else if (direction == "backward") {
+    compute->sector.sweepBackward();
+  } else {
+    LOGE << "Sweep direction neither forward nor backward";
+    exit(1);
+  }
 }
 

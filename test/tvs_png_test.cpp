@@ -1,7 +1,7 @@
 #include "helper.h"
 
 #include "../src/definitions.h"
-#include "../src/DEM.h"
+#include "../src/Compute.h"
 #include "../src/Output.h"
 
 // Using a md5sum isn't really cool for testing because it doesn't
@@ -10,16 +10,14 @@
 SCENARIO("Total Viewshed PNG output") {
   std::stringstream cmd;
   std::stringstream expected;
-  std::string current_md5_from_png = "48c285f34dce7039b4e037dcdc3c93fd";
+  std::string current_md5_from_png = "80237385cd3d2ab508400a1d3054ba74";
 
   setup();
   createMockDEM(fixtures::mountainDEM);
-  DEM dem = DEM();
-  FLAGS_is_precompute = true;
-  dem.compute();
-  FLAGS_is_precompute = false;
-  dem.compute();
-  Output output = Output(dem);
+  Compute compute = Compute();
+  compute.forcePreCompute();
+  compute.forceCompute();
+  Output output = Output(compute.dem);
   output.tvsToPNG();
 
   cmd << "md5sum " << TVS_PNG_FILE;

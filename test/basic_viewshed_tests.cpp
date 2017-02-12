@@ -1,7 +1,7 @@
 #include "helper.h"
 
 #include "../src/definitions.h"
-#include "../src/DEM.h"
+#include "../src/Compute.h"
 #include "../src/Output.h"
 #include "fixtures.h"
 
@@ -29,58 +29,53 @@
 
 std::string calculateViewshedFor(int viewer) {
   FLAGS_is_store_ring_sectors = true;
-  DEM dem = DEM();
-  FLAGS_is_precompute = true;
-  dem.compute();
-  FLAGS_is_precompute = false;
-  dem.compute();
-  Output output = Output(dem);
+  Compute compute = Compute();
+  compute.forcePreCompute();
+  compute.forceCompute();
+  Output output = Output(compute.dem);
   return output.viewshedToASCII(viewer);
 }
 
-SCENARIO("Basic viewsheds") {
+TEST_CASE("Basic viewsheds") {
   setup();
 
-  GIVEN("A DEM with a symmetrical mountain summit in the middle") {
+  SECTION("A DEM with a symmetrical mountain summit in the middle") {
     createMockDEM(fixtures::mountainDEM);
 
-    THEN("a viewer on the mountain summit should see everything") {
+    SECTION("a viewer on the mountain summit should see everything") {
       std::string expected_viewshed =
           "- - - - - \n"
           "- . . . - \n"
           "- . + . - \n"
           "- . . . - \n"
-          "- - - - - \n";
+          "- - . - - \n";
       std::string result = calculateViewshedFor(12);
       REQUIRE(result == expected_viewshed);
     }
 
-    THEN(
-        "the mountain should prevent a viewer in a corner seeing the far "
-        "corner") {
+    // TODO: Why isn't point 21 closed?
+    SECTION("mountain prevents viewer in corner seeing far corner") {
       std::string expected_viewshed =
           "+ . . . . \n"
           ". . - - - \n"
           ". - . - . \n"
-          ". - - . . \n"
-          ". - . . . \n";
+          ". - - - . \n"
+          ". . . . . \n";
       std::string result = calculateViewshedFor(0);
       REQUIRE(result == expected_viewshed);
     }
   }
 
-  GIVEN("A double peaked DEM") {
+  SECTION("A double peaked DEM") {
     createMockDEM(fixtures::doublePeakDEM);
-    THEN("a viewer in the top-left corner should see 2 ring sectors") {
-      // Point 24 doesn't have a closing marker, not sure why?
-      // Maybe because ring sectors aren't exactly the same concept as visible
-      // points?
+    // TODO: Why aren't points 10 and 24 closed?
+    SECTION("a viewer in the top-left corner should see 2 ring sectors") {
       std::string expected_viewshed =
           "+ . - . . \n"
           ". . - . . \n"
-          "- - - + - \n"
-          ". . + . - \n"
-          ". . - - . \n";
+          ". - - + . \n"
+          ". . + + - \n"
+          ". . . - . \n";
       std::string result = calculateViewshedFor(0);
       REQUIRE(result == expected_viewshed);
     }

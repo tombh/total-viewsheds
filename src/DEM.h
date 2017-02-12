@@ -1,3 +1,5 @@
+#include "LinkedList.h"
+
 #ifndef DEM_H
 #define DEM_H
 
@@ -5,24 +7,24 @@ namespace TVS {
 
 class DEM {
  public:
-  bool is_store_ring_sectors;
-  bool is_computing;
-  bool is_precomputing;
   int width;
   int height;
   int size;
   int scale;
+  LinkedList::node *nodes;
+  int *nodes_sector_ordered;
   float *cumulative_surface;
+
+  bool is_computing;
+  bool is_precomputing;
 
   DEM();
   ~DEM();
-  void writeTVSOutput();
   float maxViewshedValue();
   float minViewshedValue();
-  void compute();
-
- private:
-  double dtime();
+  void prepareForCompute();
+  void setToPrecompute();
+  void setToCompute();
 };
 }
 

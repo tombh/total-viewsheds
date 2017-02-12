@@ -1,16 +1,14 @@
 #include "helper.h"
 
 #include "../src/definitions.h"
-#include "../src/DEM.h"
+#include "../src/Compute.h"
 #include "../src/Output.h"
 
 std::string calculateTVS() {
-  DEM dem = DEM();
-  FLAGS_is_precompute = true;
-  dem.compute();
-  FLAGS_is_precompute = false;
-  dem.compute();
-  Output output(dem);
+  Compute compute = Compute();
+  compute.forcePreCompute();
+  compute.forceCompute();
+  Output output(compute.dem);
   return output.tvsToASCII();
 }
 
@@ -26,27 +24,26 @@ SCENARIO("Total viewsheds") {
   THEN("for the mountain DEM TVS values should be greater in the middle") {
     createMockDEM(fixtures::mountainDEM);
     std::string expected_tvs =
-        "0.089737 0.078242 0.098087 0.078242 0.089737 \n"
-        "0.086336 0.141383 0.129477 0.141383 0.086336 \n"
-        "0.105998 0.124606 0.161910 0.124606 0.105998 \n"
-        "0.092023 0.119315 0.138933 0.119315 0.092023 \n"
-        "0.096730 0.071249 0.084306 0.071249 0.096729 \n\n";
+      "0.211532 0.093598 0.069163 0.094122 0.086597 \n"
+      "0.081642 0.122147 0.135216 0.122452 0.080595 \n"
+      "0.083726 0.138489 0.156935 0.138620 0.084598 \n"
+      "0.102320 0.129067 0.141893 0.129372 0.102058 \n"
+      "0.105274 0.089578 0.099160 0.089316 0.107063 \n\n";
     std::string result = calculateTVS();
     REQUIRE(result == expected_tvs);
   }
 
   // PROBLEMS:
-  // * The summit of the highest peak should have the highest value.
-  // * It feels like TVS values are flipped from the top-left to the
-  //   bottom-right?
+  //   I think it's clear from this that TVS values are calculated relative
+  //   to the sector-ordered orientation.
   THEN("for the double-peaked DEM then values in the dip should be lowest") {
     createMockDEM(fixtures::doublePeakDEM);
     std::string expected_tvs =
-        "0.072076 0.138764 0.141864 0.143935 0.116919 \n"
-        "0.138764 0.168379 0.157581 0.142413 0.149566 \n"
-        "0.146592 0.157581 0.161910 0.164589 0.111435 \n"
-        "0.143935 0.142413 0.164589 0.124245 0.126630 \n"
-        "0.116919 0.129820 0.143688 0.114196 0.069153 \n\n";
+      "0.095115 0.140063 0.098749 0.142516 0.125144 \n"
+      "0.125182 0.160039 0.142190 0.142351 0.151213 \n"
+      "0.129233 0.153524 0.156935 0.157242 0.113736 \n"
+      "0.169986 0.145503 0.166869 0.129122 0.131960 \n"
+      "0.144563 0.167062 0.128396 0.123784 0.101780 \n\n";
     std::string result = calculateTVS();
     REQUIRE(result == expected_tvs);
   }

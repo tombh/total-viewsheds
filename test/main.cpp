@@ -10,7 +10,11 @@
 int main(int argc, char *argv[]) {
   backward::SignalHandling sh;
 
-  TVS::helper::init(argc, argv);
+  // Pass empty args to gflags so catch.hpp can use the real ones
+  char empty_arg[] = "";
+  char *empty_args[] = { &empty_arg[0] };
+  TVS::helper::init(0, empty_args);
+
   TVS::FLAGS_etc_dir = "./test/etc";
   TVS::helper::buildPathStrings();
 

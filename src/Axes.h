@@ -1,18 +1,17 @@
 #include "DEM.h"
-#include "Sector.h"
 
-#ifndef SECTORAXES_H
-#define SECTORAXES_H
+#ifndef AXES_H
+#define AXES_H
 
 namespace TVS {
 
-class SectorAxes {
+class Axes {
  public:
-  Sector &sector;
+  DEM &dem;
 
-  SectorAxes(Sector&);
-  ~SectorAxes();
-  void adjust();
+  Axes(DEM&);
+  ~Axes();
+  void adjust(int);
   void setDistancesFromVerticalAxis();
   void sortByDistanceFromHorizontalAxis();
 
@@ -23,6 +22,9 @@ class SectorAxes {
   double *itan;
   int *tmp1;
   int *tmp2;
+  int quad;
+  int sector_angle;
+  double shift_angle;
   double computable_angle;
 
   void preComputeTrig();

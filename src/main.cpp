@@ -3,29 +3,28 @@
 
 #include "definitions.h"
 #include "helper.h"
-#include "DEM.h"
-#include "Output.h"
+#include "Compute.h"
 
 int main(int argc, char *argv[]) {
   TVS::helper::init(argc, argv);
 
   printf("Logging to %s...\n", TVS::FLAGS_log_file.c_str());
 
-  TVS::DEM dem = TVS::DEM();
-  TVS::Output output = TVS::Output(dem);
+  TVS::Compute compute = TVS::Compute();
 
   if(!TVS::FLAGS_is_precompute) {
     printf("Computing (using precomputed data in %s)...\n", TVS::SECTOR_DIR.c_str());
   } else {
-    printf("Precomputing...\n", dem.size);
+    printf("Precomputing...\n", compute.dem.size);
   }
 
-  dem.compute();
+  compute.run();
 
-  printf("%d DEM points computed\n", dem.size);
+  printf("%d DEM points computed\n", compute.dem.size);
 
   if(!TVS::FLAGS_is_precompute) {
-    output.tvsToPNG();
+    compute.output();
+    printf("%s written\n", TVS::TVS_RESULTS_FILE.c_str());
     printf("%s written\n", TVS::TVS_PNG_FILE.c_str());
   }
 

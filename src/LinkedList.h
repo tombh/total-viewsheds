@@ -6,11 +6,12 @@ class LinkedList {
   struct node {
     // Identifier of point.
     int idx;
-    // Order in terms of orthogonal ditance from band of sight central axis.
-    int oa;
-    //	height of point in DEM (scaled relative to 1 unit of each DEM)
+    // Position of node relative to rotated sector y-axis. Used when
+    // deciding the position of a new node in the Band of Sight.
+    int sight_ordered_index;
+    // Height of point in DEM (scaled relative to 1 unit of each DEM)
     float h;
-    // Distance from point of view
+    // Distance from sector's base x-axis
     float d;
   };
 

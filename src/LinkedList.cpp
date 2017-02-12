@@ -5,14 +5,25 @@ LinkedList::LinkedList() {}
 
 LinkedList::LinkedList(int x) {
   LL = new LinkedListNode[x];
-  Size = x;
   LinkedList::Clear();
+
+  // Reserved places, so may not be this many nodes, see 'Count'
+  Size = x;
+
+  // Head and tail of a queue for nodes to be added and removed
   Head = 0;
   Tail = 0;
+
+  // How many nodes *currently* in the list
   Count = 0;
+
+  // First and last in order of line of sight sweeps
   First = 0;
   Last = 0;
+
+  // -1 is the end of a forward sweep
   LL[0].next = -1;
+  // -2 is the end of a backward sweep
   LL[0].prev = -2;
 }
 
@@ -44,12 +55,10 @@ int LinkedList::Prev(int j) { return LL[j].prev; }
 
 void LinkedList::Add(node node, int pos, bool remove) {
   int tn = -3, tp = -3;
-  bool removing_first, removing_last, replace = false;
+  bool replace = false;
   if (remove) {
     tn = LL[Tail].next;
     tp = LL[Tail].prev;
-    removing_first = (tp == -2);
-    removing_last = (tn == -1);
     replace = (Tail == pos) || (LL[Tail].prev == pos);
   }
 

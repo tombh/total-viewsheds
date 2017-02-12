@@ -4,6 +4,7 @@
 #include <plog/Log.h>
 
 #include "definitions.h"
+#include "LinkedList.h"
 #include "DEM.h"
 #include "Output.h"
 #include "Sector.h"
@@ -63,7 +64,7 @@ std::vector<unsigned char> Output::tvsArrayToPNGVect() {
   return image;
 }
 
-// Converts final TVS to an ASCII grid. For debugging and testing.
+// Converts final TVS to an ASCII grid.
 // Eg for a simple 5x5 DEM;
 // 0.215940  0.078242  0.098087  0.078242  0.089737
 // 0.086336  0.141383  0.129477  0.141383  0.086336
@@ -146,22 +147,18 @@ int Output::readNextValue() {
 // angle.
 // But we're just interested in one point (ie one viewshed) from each sector.
 void Output::parseSectorPoints(FILE *sector_file) {
-  int value;
+  int opening, closing;
   int no_of_ring_sectors;
   for (int point = 0; point < this->dem.size; point++) {
     // Backward and Forward facing portions of the sector
     for (int b_and_f = 0; b_and_f < 2; b_and_f++) {
       no_of_ring_sectors = this->getNumberOfRingSectors();
       for (int iRS = 0; iRS < no_of_ring_sectors; iRS++) {
-        // Opening
-        value = readNextValue();
-        if (point == this->viewer) {
-          this->viewshed[value] = "+ ";
-        }
-        // Closing
-        value = readNextValue();
-        if (point == this->viewer) {
-          this->viewshed[value] = "- ";
+        opening = readNextValue();
+        closing = readNextValue();
+        if (point == this->viewer && opening != closing) {
+          this->viewshed[opening] = "+ ";
+          this->viewshed[closing] = "- ";
         }
       }
     }

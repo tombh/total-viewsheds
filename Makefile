@@ -86,7 +86,7 @@ tvs-test: $(TEST_OBJS) $(DEP_OBJS)
 download-libs:
 	$(call getLibFromGithub,SergiusTheBest/plog,e82f39a,include/plog)
 	$(call getLibFromGithub,bombela/backward-cpp,7693dd9,backward.hpp)
-	$(call getLibFromGithub,philsquared/catch,02a69b,single_include)
+	$(call getLibFromGithub,philsquared/catch,d4ae1b1,single_include)
 	$(call getLibFromGithub,lvandeve/lodepng,8a0f16a,lodepng.h lodepng.cpp)
 	$(call getLibFromGithub,gflags/gflags,30dbc81,.)
 	$(call installGflags)

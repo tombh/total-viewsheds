@@ -3,7 +3,7 @@
 #include <plog/Log.h>
 
 #include "DEM.h"
-#include "SectorAxes.h"
+#include "Axes.h"
 #include "definitions.h"
 
 namespace TVS {
@@ -38,16 +38,17 @@ namespace TVS {
  *
 **/
 
-SectorAxes::SectorAxes(Sector &sector)
-    : sector(sector),
-      isin(new double[sector.dem.size]),
-      icos(new double[sector.dem.size]),
-      itan(new double[sector.dem.size]),
-      icot(new double[sector.dem.size]),
-      tmp1(new int[sector.dem.size]),
-      tmp2(new int[sector.dem.size]) {}
+Axes::Axes(DEM &dem)
+    : dem(dem),
+      shift_angle(FLAGS_sector_shift),
+      isin(new double[dem.size]),
+      icos(new double[dem.size]),
+      itan(new double[dem.size]),
+      icot(new double[dem.size]),
+      tmp1(new int[dem.size]),
+      tmp2(new int[dem.size]) {}
 
-SectorAxes::~SectorAxes() {
+Axes::~Axes() {
   delete[] this->isin;
   delete[] this->icos;
   delete[] this->itan;
@@ -57,7 +58,9 @@ SectorAxes::~SectorAxes() {
 }
 
 // Translate points to new sector angle
-void SectorAxes::adjust() {
+void Axes::adjust(int sector_angle) {
+  this->sector_angle = sector_angle;
+  this->quad = (this->sector_angle >= 90) ? 1 : 0;
   this->preComputeTrig();
   this->setDistancesFromVerticalAxis();
   this->sortByDistanceFromHorizontalAxis();
@@ -65,32 +68,31 @@ void SectorAxes::adjust() {
 
 // Orthogonal distance of points relative to the initial Band of Sight.
 // O(N)
-void SectorAxes::setDistancesFromVerticalAxis() {
+void Axes::setDistancesFromVerticalAxis() {
   double val;
-  for (int x = 0; x < this->sector.dem.width; x++) {
-    for (int y = 0; y < this->sector.dem.height; y++) {
-      if (this->sector.quad == 1) {
+  for (int x = 0; x < this->dem.width; x++) {
+    for (int y = 0; y < this->dem.height; y++) {
+      if (this->quad == 1) {
         val = this->icos[y] - this->isin[x];
       } else {
         val = this->icos[x] + this->isin[y];
       }
-      this->sector.nodes[x * this->sector.dem.height + y].d = val;
+      this->dem.nodes[x * this->dem.height + y].d = val;
     }
   }
 }
 
-void SectorAxes::sortByDistanceFromHorizontalAxis() {
+void Axes::sortByDistanceFromHorizontalAxis() {
   this->preSort();
   this->sort();
 }
 
-void SectorAxes::preComputeTrig() {
+void Axes::preComputeTrig() {
   double sin, cos, tan, cotan;
 
-  this->computable_angle = this->sector.sector_angle;
-  if (this->sector.quad == 1) this->computable_angle -= 90;
-  this->computable_angle += this->sector.shift_angle;
-  this->computable_angle += 0.5; // TODO: What is this?
+  this->computable_angle = this->sector_angle;
+  if (this->quad == 1) this->computable_angle -= 90;
+  this->computable_angle += this->shift_angle;
   this->computable_angle *= TO_RADIANS;
 
   sin = std::sin(this->computable_angle);
@@ -99,7 +101,7 @@ void SectorAxes::preComputeTrig() {
   cotan = 1 / tan;
 
   // O(N)
-  for (int i = 0; i < this->sector.dem.size; i++) {
+  for (int i = 0; i < this->dem.size; i++) {
     this->isin[i] = i * sin;
     this->icos[i] = i * cos;
     this->itan[i] = i * tan;
@@ -108,7 +110,7 @@ void SectorAxes::preComputeTrig() {
 }
 
 // TODO: Make readable
-void SectorAxes::preSort() {
+void Axes::preSort() {
   double ct, tn;
   this->tmp1[0] = 0;
   this->tmp2[0] = 0;
@@ -116,14 +118,14 @@ void SectorAxes::preSort() {
   tn = std::tan(this->computable_angle);
   ct = 1 / tn;
   // O(N / height)
-  for (int j = 1; j < this->sector.dem.width; j++) {
+  for (int j = 1; j < this->dem.width; j++) {
     this->tmp1[j] =
-        this->tmp1[j - 1] + (int)std::min(this->sector.dem.height, (int)floor(ct * j));
+        this->tmp1[j - 1] + (int)std::min(this->dem.height, (int)floor(ct * j));
   }
   // O(N / width)
-  for (int i = 1; i < this->sector.dem.height; i++) {
+  for (int i = 1; i < this->dem.height; i++) {
     this->tmp2[i] =
-        this->tmp2[i - 1] + (int)std::min(this->sector.dem.width, (int)floor(tn * i));
+        this->tmp2[i - 1] + (int)std::min(this->dem.width, (int)floor(tn * i));
   }
 }
 
@@ -131,34 +133,34 @@ void SectorAxes::preSort() {
 // line.
 // TODO: Make readable
 // O(N)
-void SectorAxes::sort() {
-  double lx = this->sector.dem.width - 1;
-  double ly = this->sector.dem.height - 1;
+void Axes::sort() {
+  double lx = this->dem.width - 1;
+  double ly = this->dem.height - 1;
   double x, y;
   int ind, xx, yy, p, np;
-  for (int j = 1; j <= this->sector.dem.width; j++) {
+  for (int j = 1; j <= this->dem.width; j++) {
     x = (j - 1);
-    for (int i = 1; i <= this->sector.dem.height; i++) {
+    for (int i = 1; i <= this->dem.height; i++) {
       y = (i - 1);
       ind = i * j;
       ind += ((ly - y) < (this->icot[j - 1]))
-                 ? ((this->sector.dem.height - i) * j -
-                    this->tmp2[this->sector.dem.height - i] - (this->sector.dem.height - i))
+                 ? ((this->dem.height - i) * j -
+                    this->tmp2[this->dem.height - i] - (this->dem.height - i))
                  : this->tmp1[j - 1];
       ind += ((lx - x) < (itan[i - 1]))
-                 ? ((this->sector.dem.width - j) * i -
-                    this->tmp1[this->sector.dem.width - j] - (this->sector.dem.width - j))
+                 ? ((this->dem.width - j) * i -
+                    this->tmp1[this->dem.width - j] - (this->dem.width - j))
                  : this->tmp2[i - 1];
       xx = j - 1;
       yy = i - 1;
-      p = xx * this->sector.dem.height + yy;
-      np = (this->sector.dem.width - 1 - yy) * this->sector.dem.height + xx;
-      if (this->sector.quad == 0) {
-        this->sector.nodes[p].oa = ind - 1;
-        this->sector.nodes_orth_ordered[ind - 1] = np;
+      p = xx * this->dem.height + yy;
+      np = (this->dem.width - 1 - yy) * this->dem.height + xx;
+      if (this->quad == 0) {
+        this->dem.nodes[p].sight_ordered_index = ind - 1;
+        this->dem.nodes_sector_ordered[ind - 1] = np;
       } else {
-        this->sector.nodes[np].oa = ind - 1;
-        this->sector.nodes_orth_ordered[this->sector.dem.size - ind] = p;
+        this->dem.nodes[np].sight_ordered_index = ind - 1;
+        this->dem.nodes_sector_ordered[this->dem.size - ind] = p;
       }
     }
   }

@@ -1,7 +1,7 @@
 #include <string>
 
-#include "LinkedList.h"
 #include "DEM.h"
+#include "BOS.h"
 
 #ifndef SECTOR_H
 #define SECTOR_H
@@ -11,15 +11,9 @@ namespace TVS {
 class Sector {
  public:
   DEM &dem;
+  BOS bos_manager;
 
-  LinkedList::node *nodes;
-  LinkedList::node newnode;
-  LinkedList::node newnode_trans;
-  int *nodes_orth_ordered;
-
-  LinkedList band_of_sight;
-  int band_size;
-  int half_band_size;
+  int point;
 
   FILE *precomputed_data_file;
   char *precomputed_data_path;
@@ -29,26 +23,17 @@ class Sector {
   double scaled_observer_height;
 
   int sector_angle;
-  double origin;
-  double shift_angle;
 
-  int **rsectorF;            // Rings sector rigth nodes
-  int **rsectorB;            // Ring sector left nodes
-  unsigned short *size_dsF;  // size number sector rigth
-  unsigned short *size_dsB;  // size number sector rigth
+  int **rsectorF;
+  int **rsectorB;
+  unsigned short *size_dsF;
+  unsigned short *size_dsB;
   float *surfaceF;
   float *surfaceB;
 
   int quad;
-
-  bool atright;
-  bool atright_trans;
-
-  int NEW_position;        // Position new node
-  int NEW_position_trans;  // Auxliary new position node
-  int PoV;                 // Position actuallly node
-
-  // Sweep variables
+  float h;
+  float d;
   float open_delta_d;
   float delta_d;
   float open_delta_h;
@@ -58,44 +43,35 @@ class Sector {
   float sur_dataB;
   float max_angle;
   int sweeppt;
+  int rsF[1000][2];
+  int rsB[1000][2];
+  int nrsF;
+  int nrsB;
 
-  int rsF[1000][2];  // Temporal storage of visible ring sector up to 1000(large
-                     // enough)
-  int rsB[1000][2];  // Temporal storage of visible ring sector up to 1000(large
-                     // enough)
-  int nrsF;          // Number ring sector to right point
-  int nrsB;          // Number ting sector to left point
+  Sector(DEM&);
+  ~Sector();
 
-  Sector(DEM&);  // Create Sector.
-  ~Sector();             // dISPOSE Sector.
-
-  void changeAngle();             // Change the Sector of 0 to 179
-
-  // Gives each node its natural position and elevation
+  void initialize();
+  void changeAngle(int);
   void setHeights();
-
-  void loopThroughBands(int);
-  void post_loop(int);  // Operations after analysis
-
-  void storers(int i);  // Storage dates of all ring sector this sector
-
-  void calcule_pos_newnode(bool);
-  void insert_node(LinkedList::node, int, bool);
+  void loopThroughBands();
+  void storers(int i);
 
   int presweepF();
   int presweepB();
-  void sweepS(int i);  // Performs sweep node of sector (surface kernel);
+  void sweepS();
+  void sweepInit();
+  void sweepForward();
+  void sweepBackward();
   void kernelS(int rs[][2], int &nrs, float &sur_data);
 
-  void init_storage();
-
-  void closeprof(bool visible, bool fwd, bool vol, bool full);
-  void recordsectorRS();  // Record dates rings sectors in files
+  void closeprof(bool visible, bool fwd);
+  void recordsectorRS();
   static void preComputedDataPath(char *, int);
   static void ringSectorDataPath(char *, int);
   void openPreComputedDataFile();
 };
 
-}  // namespace TVS
+}
 
 #endif
