@@ -16,6 +16,7 @@
 
 // Create a fake DEM for testing purposes
 void createMockDEM(const int dem[]) {
+  int row_step, col_step, i;
   FILE* f;
   f = fopen(INPUT_DEM_FILE.c_str(), "wb");
 
@@ -23,8 +24,14 @@ void createMockDEM(const int dem[]) {
     throw "Error opening mock DEM, tests should be run from the base "
           "project path.";
   } else {
-    for (int i = 0; i < 25; i++) {
-      fwrite(&dem[i], 2, 1, f);
+    // Convert to .bt format
+    for (int x = 0; x < 5; x++) {
+      row_step = 25 + x;
+      for (int y = 0; y < 5; y++) {
+        col_step = (y + 1) * 5;
+        i = row_step - col_step;
+        fwrite(&dem[i], 2, 1, f);
+      }
     }
   }
   fclose(f);

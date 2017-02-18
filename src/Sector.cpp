@@ -18,7 +18,7 @@ Sector::Sector(DEM &dem)
       // curved earth projections?
       // TODO: This is probably better associated as a property of the DEM
       scaled_observer_height(FLAGS_observer_height / dem.scale),
-      bos_manager(BOS(dem)){}
+      bos_manager(BOS(dem)) {}
 
 void Sector::initialize() {
   if (this->dem.is_computing) {
@@ -63,9 +63,7 @@ void Sector::loopThroughBands() {
     this->bos_manager.adjustToNextPoint(point);
     if (this->dem.is_computing) {
       this->sweepS();
-      this->storers(
-        this->dem.nodes_sector_ordered[point]
-      );
+      this->storers(this->dem.nodes_sector_ordered[point]);
     }
   }
   fclose(this->precomputed_data_file);
@@ -86,21 +84,28 @@ void Sector::setHeights() {
   if (f == NULL) {
     LOG_ERROR << "Error opening: " << INPUT_DEM_FILE;
   } else {
-    for (int point = 0; point < this->dem.size; point++) {
-      // TODO: Does idx really need to duplicate the array index!?
-      this->dem.nodes[point].idx = point;
+    // The .bt DEM format starts at the bottom left and finishes
+    // in the top right.
+    int point, row_step, col_step;
+    for (int x = 0; x < this->dem.width; x++) {
+      row_step = this->dem.size + x;
+      for (int y = 0; y < this->dem.height; y++) {
+        col_step = ((y + 1) * this->dem.width);
+        point = row_step - col_step;
+        //This rotates the DEM heights 90 degrees anticlockwise.
+        //As per the .bt DEM format.
+        //int translated_point = (point / this->dem.width) +
+                             //(this->dem.height * (point % this->dem.width));
 
-      fread(&num, 2, 1, f);
+        this->dem.nodes[point].idx = point;
 
-      // Original reading does this funny geometric translation...
-      // It's like the DEM is a piece of paper and you flip the top-right corner
-      // to the bottom-left. But why!? Because that's where sector-ordered 0 starts?
-      // h[i/xdim+ydim*(i%xdim)] = num/SCALE; //internal representation from top
-      // to row.
-      //int translated_point = (point / this->dem.width) + (this->dem.height * (point % this->dem.size));
+        fread(&num, 2, 1, f);
 
-      // Why divide by SCALE?
-      this->dem.nodes[point].h = (float)num / this->dem.scale;  // decameters
+        // Why divide by SCALE?
+        // Surely this will effect spherical earth based calculations?
+        this->dem.nodes[point].h =
+          (float)num / this->dem.scale;  // decameters
+      }
     }
   }
   fclose(f);
@@ -197,7 +202,6 @@ void Sector::sweepInit() {
   this->h = this->bos_manager.bos.LL[this->bos_manager.pov].Value.h +
             this->scaled_observer_height;
 }
-
 
 void Sector::sweepForward() {
   int sweep = this->presweepF();

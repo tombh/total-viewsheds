@@ -34,16 +34,15 @@ TEST_CASE("Total viewsheds") {
   }
 
   // PROBLEMS:
-  //   I think it's clear from this that TVS values are calculated relative
-  //   to the sector-ordered orientation.
+  //   The DEM is symmetrical from top left to bottom right, so why isn't this?
   SECTION("for the double-peaked DEM then values in the dip should be lowest") {
     createMockDEM(fixtures::doublePeakDEM);
     std::string expected_tvs =
-      "0.065826 0.140063 0.098749 0.142516 0.127262 \n"
-      "0.125182 0.160039 0.142190 0.142351 0.151213 \n"
-      "0.129233 0.153524 0.156935 0.157242 0.113736 \n"
-      "0.169986 0.145503 0.166869 0.129122 0.131960 \n"
-      "0.144563 0.167062 0.128396 0.123784 0.101780 \n\n";
+      "0.065826 0.116027 0.114567 0.120155 0.114571 \n"
+      "0.115825 0.156906 0.142190 0.138883 0.151213 \n"
+      "0.148395 0.153524 0.156935 0.157242 0.118891 \n"
+      "0.140732 0.145503 0.166869 0.129122 0.133801 \n"
+      "0.132483 0.181556 0.115371 0.134210 0.101780 \n\n";
     std::string result = calculateTVS();
     REQUIRE(result == expected_tvs);
   }
