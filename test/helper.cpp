@@ -42,6 +42,12 @@ std::string exec(const char* cmd) {
   return result;
 }
 
+void setFLAGDefaults() {
+  FLAGS_dem_width = 5;
+  FLAGS_dem_height = 5;
+  FLAGS_is_store_ring_sectors = false;
+}
+
 void emptyDirectories() {
   std::stringstream cmd;
   if(std::string(ETC_DIR).find(".") != 0){
@@ -52,6 +58,7 @@ void emptyDirectories() {
 }
 
 void setup() {
+  setFLAGDefaults();
   emptyDirectories();
   helper::createDirectories();
 }
@@ -112,10 +119,12 @@ void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
   Axes axes = Axes(sector->dem);
   axes.adjust(angle);
   sector->dem.setToPrecompute();
+  sector->sector_angle = angle;
   sector->openPreComputedDataFile();
   sector->bos_manager.setup(sector->precomputed_data_file);
   if (ordering == "dem-indexed") bosLoopToDEMPoint(sector, point);
-  if (ordering == "sector-indexed") bosLoopToSectorPoint(sector, point);
+  if (ordering == "sector-indexed") bosLoopToSectorPoint(sector, point, false);
+  if (ordering == "sector-indexed!") bosLoopToSectorPoint(sector, point, true);
   fclose(sector->precomputed_data_file);
 }
 
@@ -127,13 +136,19 @@ void bosLoopToDEMPoint(Sector *sector, int dem_point) {
   }
 }
 
-void bosLoopToSectorPoint(Sector *sector, int sector_point) {
+void bosLoopToSectorPoint(Sector *sector, int sector_point, bool is_print_each) {
+  if (is_print_each) {
+    LOGI << "\n" + bosToASCII(sector);
+  }
   for (int i = 0; i < sector_point; i++) {
     sector->bos_manager.adjustToNextPoint(i);
+    if (is_print_each) {
+      LOGI << "\n" + bosToASCII(sector);
+    }
   }
 }
 
-std::string bosToASCII(Sector *sector){
+std::string bosToASCII(Sector *sector) {
   std::stringstream out;
   out << std::fixed;
   out.precision(5);
@@ -153,6 +168,8 @@ std::string bosToASCII(Sector *sector){
     if(i == sector->bos_manager.bos.Tail) out << "T";
     out << "\n";
   }
+  out << "H=" << sector->bos_manager.bos.Head;
+  out << "\n";
   return out.str();
 }
 
@@ -185,6 +202,7 @@ std::string sweepToASCII(Sector *sector, std::string direction){
 }
 
 void computeSweepFor(Compute *compute, std::string direction, int angle, int point) {
+  FLAGS_is_store_ring_sectors = true;
   compute->sector.setHeights();
   computeBOSFor(&compute->sector, angle, point, "dem-indexed");
   compute->sector.sweepInit();

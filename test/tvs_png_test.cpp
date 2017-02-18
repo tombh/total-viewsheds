@@ -10,7 +10,7 @@
 SCENARIO("Total Viewshed PNG output") {
   std::stringstream cmd;
   std::stringstream expected;
-  std::string current_md5_from_png = "80237385cd3d2ab508400a1d3054ba74";
+  std::string current_md5_from_png = "30926abf1c74a2c59c7ec3a3deb77571";
 
   setup();
   createMockDEM(fixtures::mountainDEM);

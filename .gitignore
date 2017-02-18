@@ -1,4 +1,5 @@
 etc/sort/*
+etc/input/*
 etc/output/*
 etc/rsector/*
 etc/bin/*

@@ -56,7 +56,6 @@ void DEM::setToCompute() {
   this->is_computing = true;
 }
 
-
 void DEM::prepareForCompute() {
   for (int point = 0; point < this->size; point++) {
     this->cumulative_surface[point] = 0;

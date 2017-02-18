@@ -12,7 +12,7 @@ std::string calculateTVS() {
   return output.tvsToASCII();
 }
 
-SCENARIO("Total viewsheds") {
+TEST_CASE("Total viewsheds") {
   setup();
 
   // PROBLEMS:
@@ -21,10 +21,10 @@ SCENARIO("Total viewsheds") {
   //   able to see the whole DEM counts around 4x4 (16) DEM points. Perhaps
   //   it's a factor of 4 and not 5 because the point of the viewer is not
   //   counted in Band of Sight totals?
-  THEN("for the mountain DEM TVS values should be greater in the middle") {
+  SECTION("for the mountain DEM TVS values should be greater in the middle") {
     createMockDEM(fixtures::mountainDEM);
     std::string expected_tvs =
-      "0.211532 0.093598 0.069163 0.094122 0.086597 \n"
+      "0.086926 0.093598 0.069163 0.094122 0.088714 \n"
       "0.081642 0.122147 0.135216 0.122452 0.080595 \n"
       "0.083726 0.138489 0.156935 0.138620 0.084598 \n"
       "0.102320 0.129067 0.141893 0.129372 0.102058 \n"
@@ -36,10 +36,10 @@ SCENARIO("Total viewsheds") {
   // PROBLEMS:
   //   I think it's clear from this that TVS values are calculated relative
   //   to the sector-ordered orientation.
-  THEN("for the double-peaked DEM then values in the dip should be lowest") {
+  SECTION("for the double-peaked DEM then values in the dip should be lowest") {
     createMockDEM(fixtures::doublePeakDEM);
     std::string expected_tvs =
-      "0.095115 0.140063 0.098749 0.142516 0.125144 \n"
+      "0.065826 0.140063 0.098749 0.142516 0.127262 \n"
       "0.125182 0.160039 0.142190 0.142351 0.151213 \n"
       "0.129233 0.153524 0.156935 0.157242 0.113736 \n"
       "0.169986 0.145503 0.166869 0.129122 0.131960 \n"

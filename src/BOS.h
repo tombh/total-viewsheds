@@ -15,25 +15,22 @@ class BOS {
   int pov;
   int band_size;
   int half_band_size;
+  bool remove;
   LinkedList bos;
   LinkedList::node newnode;
-  LinkedList::node newnode_trans;
   FILE *precomputed_data_file;
 
-  bool atright;
-  bool atright_trans;
-  int NEW_position;
-  int NEW_position_trans;
-
   BOS(DEM&);
-  ~BOS();
   void setup(FILE*);
-  void setPointOfView();
   void adjustToNextPoint(int);
+  void addNewNode();
+  void setPointOfView();
+  int calculateNewPosition();
+  int getNewPosition();
+  void insertNode();
 
  private:
-  void calculateNewnodePosition(bool);
-  void insertNode(LinkedList::node, int, bool);
+  int ensureBandSizeIsOdd(int);
 };
 }
 

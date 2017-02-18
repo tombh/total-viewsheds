@@ -25,6 +25,7 @@ class DEM {
   void prepareForCompute();
   void setToPrecompute();
   void setToCompute();
+
 };
 }
 

@@ -21,6 +21,7 @@ class Compute {
  private:
   void initialize();
   void iterateSectors();
+  void ensureDEMIsSquare();
 };
 }
 

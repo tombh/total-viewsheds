@@ -17,7 +17,7 @@ class LinkedList {
 
   struct LinkedListNode {
    public:
-    node Value;
+    LinkedList::node Value;
     short next;  // Identifier the next node in Linked List.
     short prev;  // Identifier the Previous node in Linked List.
   };
@@ -32,7 +32,6 @@ class LinkedList {
 
   LinkedListNode *LL;  // array of node
 
-  LinkedList();       // Create de Linked List
   LinkedList(int x);  // Create de Linked List with size x
   ~LinkedList();
   void Clear();       // Initializing the Linked list and the first node
@@ -45,7 +44,6 @@ class LinkedList {
   void AddLast(node node,
                bool remove);  // Add new node to linked list, at the end
   void FirstNode(node node);  // Add new node to linked list
-  void Remove_two();  // Remove two node of list when we are exit the list
   void Remove_one();  // Remove two node of list when we are exit the list
   void removelinks(int prv, int nxt);
   void simpleinsert(int pos);

@@ -36,6 +36,8 @@ namespace TVS {
  * distances inside the Band of Sight. In reality the 2 new axes do not
  * necessarily intersect in the middle of the DEM.
  *
+ * NB: Only square DEMs are currently supported
+ *
 **/
 
 Axes::Axes(DEM &dem)

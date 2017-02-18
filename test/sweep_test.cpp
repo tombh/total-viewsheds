@@ -7,13 +7,13 @@
 
 TEST_CASE("Sweeping bands of sights") {
   setup();
-  Compute compute = Compute();
 
   SECTION("For the mountain DEM"){
     createMockDEM(fixtures::mountainDEM);
 
     // Looking down from the top of the mountain to the bottom right
     SECTION("Sector 0, point 12, forward") {
+      Compute compute = Compute();
       computeSweepFor(&compute, "forward", 0, 12);
       std::string sweep = sweepToASCII(&compute.sector, "forward");
       std::string expected =
@@ -31,6 +31,7 @@ TEST_CASE("Sweeping bands of sights") {
 
     // Looking down from the top of the mountain to the top middle
     SECTION("Sector 0, point 12, backward") {
+      Compute compute = Compute();
       computeSweepFor(&compute, "backward", 0, 12);
       std::string expected =
         "12 0.9 \n"
@@ -49,6 +50,7 @@ TEST_CASE("Sweeping bands of sights") {
     // Looking from the top left to the bottom right, then the
     // peak should obscure the far corner.
     SECTION("Sector 0, point 0, forward") {
+      Compute compute = Compute();
       computeSweepFor(&compute, "forward", 0, 1 );
       std::string sweep = sweepToASCII(&compute.sector, "forward");
       std::string expected =
@@ -65,6 +67,14 @@ TEST_CASE("Sweeping bands of sights") {
       REQUIRE(opening_point == 1);
       REQUIRE(closing_point == 17);
     }
+
+    SECTION("Surface checks"){
+      SECTION("Sector 90, point 0") {
+        Compute compute = Compute();
+        computeSweepFor(&compute, "forward", 90, 0);
+        REQUIRE(compute.sector.sur_dataF == 0.0f);
+      }
+    }
   }
 
   SECTION("For the double-peaked DEM"){
@@ -72,6 +82,7 @@ TEST_CASE("Sweeping bands of sights") {
 
     // Looking from top-left to bottom-right
     SECTION("Sector 0, point 0, forward") {
+      Compute compute = Compute();
       computeSweepFor(&compute, "forward", 40, 0);
       std::string sweep = sweepToASCII(&compute.sector, "forward");
       std::string expected =

@@ -18,20 +18,29 @@ namespace TVS {
 BOS::BOS(DEM &dem)
     : dem(dem),
       // Size of the Band of Sight
-      band_size(FLAGS_dem_width),
-      half_band_size((band_size - 1) / 2),
-      // The data structure maintaining the band of sight
+      band_size(ensureBandSizeIsOdd(FLAGS_dem_width)),
       bos(LinkedList(band_size)) {}
 
-BOS::~BOS() {
-  // TODO: it should be LinkedList's responsibility to delete this.
-  // But using LinkedList's destructor causes LL to be deleted prematurely.
-  delete[] this->bos.LL;
+// Currently, the adjustments to new BoS nodes requires the Bos itself to have
+// an odd size. Roughly speaking, think of it like this:
+//
+//   BoS = half_band_size + PoV + half_band_size
+//
+// It's easier to just override band_size than rewrite the bulk of the code
+// to support even-sized band sizes.
+int BOS::ensureBandSizeIsOdd(int requested_band_size) {
+  if (requested_band_size % 2 == 0) {
+    requested_band_size++;
+    LOGI << "Raising `band_size` from " << requested_band_size - 1 << " to "
+         << requested_band_size;
+  }
+  return requested_band_size;
 }
 
 // Set the band of sight up for the very first time, namely after a sector angle
 // change.
 void BOS::setup(FILE *precomputed_data_file) {
+  this->half_band_size = (this->band_size - 1) / 2;
   this->precomputed_data_file = precomputed_data_file;
   this->pov = 0;
   this->bos.Clear();
@@ -45,109 +54,103 @@ void BOS::setPointOfView() {
   this->pov = this->current_point % this->band_size;
 }
 
+// TODO: support even band sizes.
+// Anchoring to the PoV requires managing the edges of the BoS by carefully
+// using the half_band_size. This has the disadvantage of only supporting
+// odd band sizes.
 void BOS::adjustToNextPoint(int current_point) {
   this->current_point = current_point;
   this->setPointOfView();
+
   // Is the band of sight starting to be populated?
-  bool starting = (this->current_point < this->half_band_size);
+  bool starting = this->current_point < this->half_band_size;
+
   // Is the band of sight coming to an ending, therefore emptying?
-  bool ending =
-      (this->current_point >= (this->dem.size - this->half_band_size - 1));
+  int end_section = this->dem.size - this->half_band_size - 1;
+  bool ending = this->current_point >= end_section;
 
+  int node_id, leading_node;
+  int doubled = 2 * this->current_point;
 
-  this->NEW_position = -1;
-  this->NEW_position_trans = -1;
-  LinkedList::node tmp = this->newnode_trans;
-  if (!ending) {
-    this->newnode =
-        this->dem.nodes[this->dem.nodes_sector_ordered
-                            [starting ? 2 * this->current_point + 1
-                                      : this->half_band_size +
-                                            this->current_point + 1]];
-  }
   if (starting) {
-    this->newnode_trans =
-        this->dem
-            .nodes[this->dem.nodes_sector_ordered[2 * this->current_point + 2]];
+    this->remove = false;
+
+    node_id = this->dem.nodes_sector_ordered[doubled + 1];
+    this->newnode = this->dem.nodes[node_id];
+    this->insertNode();
+
+    node_id = this->dem.nodes_sector_ordered[doubled + 2];
+    this->newnode = this->dem.nodes[node_id];
+    this->insertNode();
   }
 
-  if (this->dem.is_computing) {
-    if (!ending) {
-      fread(&this->NEW_position, 4, 1, this->precomputed_data_file);
-      this->insertNode(this->newnode, this->NEW_position, !starting);
-    }
-    if (starting) {
-      fread(&this->NEW_position_trans, 4, 1, this->precomputed_data_file);
-      this->insertNode(this->newnode_trans, this->NEW_position_trans, false);
-    }
-  } else {
-    if (!starting && !ending) {
-      this->newnode =
-          this->dem.nodes[this->dem.nodes_sector_ordered
-                              [starting ? 2 * this->current_point + 1
-                                        : this->half_band_size +
-                                              this->current_point + 1]];
-      this->NEW_position = -1;
-      this->calculateNewnodePosition(true);
-    }
-    if (starting) {
-      this->newnode =
-          this->dem
-              .nodes[this->dem.nodes_sector_ordered[2 * this->current_point + 1]];
-      this->NEW_position = -1;
-      this->calculateNewnodePosition(false);
-      this->newnode =
-          this->dem
-              .nodes[this->dem.nodes_sector_ordered[2 * this->current_point + 2]];
-      this->calculateNewnodePosition(false);
-    }
+  if (!starting && !ending) {
+    this->remove = true;
+    leading_node = this->current_point + this->half_band_size + 1;
+    node_id = this->dem.nodes_sector_ordered[leading_node];
+    this->newnode = this->dem.nodes[node_id];
+    this->insertNode();
   }
-  if (ending) this->bos.Remove_two();
+
+  if (ending) {
+    this->bos.Remove_one();
+    this->bos.Remove_one();
+  }
 }
 
-void BOS::calculateNewnodePosition(bool remove) {
-  int sweep = 0;
-  if (newnode.sight_ordered_index < this->bos.LL[this->bos.First].Value.sight_ordered_index) {
-    this->NEW_position = -2;  // Before first
-    this->bos.AddFirst(newnode, remove);
-    fwrite(&this->NEW_position, 4, 1, this->precomputed_data_file);
-  } else if (newnode.sight_ordered_index > this->bos.LL[this->bos.Last].Value.sight_ordered_index) {
-    this->NEW_position = -1;
-    this->bos.AddLast(newnode, remove);
-    fwrite(&this->NEW_position, 4, 1, this->precomputed_data_file);
+// Where does the new node fit in the current BoS?
+int BOS::calculateNewPosition() {
+  int position;
+  int sweep;
+  int sanity = 0;
+  int current_sight_index = this->newnode.sight_ordered_index;
+  int first_sight_index =
+      this->bos.LL[this->bos.First].Value.sight_ordered_index;
+  int last_sight_index = this->bos.LL[this->bos.Last].Value.sight_ordered_index;
+
+  if (current_sight_index < first_sight_index) {
+    position = -2;
+  } else if (current_sight_index > last_sight_index) {
+    position = -1;
   } else {
     sweep = this->bos.LL[this->bos.First].next;
-    bool go_on = true;
-    int sanity = 0;
-
-    do {
-      if (newnode.sight_ordered_index < this->bos.LL[sweep].Value.sight_ordered_index) {
-        NEW_position = this->bos.LL[sweep].prev;
-        this->bos.Add(newnode, NEW_position, remove);
-        fwrite(&NEW_position, 4, 1, this->precomputed_data_file);
-        sweep = this->bos.LL[NEW_position].next;
-        go_on = false;
-      } else {
-        sweep = this->bos.LL[sweep].next;
-        sanity++;
-        if (sanity > this->dem.size) {
-          LOGE << "newnode.sight_ordered_index: " << newnode.sight_ordered_index
-               << " is bigger than anything in band of sight.";
-          exit(1);
-        }
+    while (current_sight_index >=
+           this->bos.LL[sweep].Value.sight_ordered_index) {
+      sweep = this->bos.LL[sweep].next;
+      sanity++;
+      if (sanity > this->dem.size) {
+        LOGE << "newnode.sight_ordered_index: " << newnode.sight_ordered_index
+             << " is bigger than anything in band of sight.";
+        throw;
       }
-    } while (go_on);
+    }
+    position = this->bos.LL[sweep].prev;
   }
+  return position;
 }
 
-void BOS::insertNode(LinkedList::node newnode, int position, bool remove) {
+int BOS::getNewPosition() {
+  int position;
+  if (this->dem.is_computing) {
+    fread(&position, 4, 1, this->precomputed_data_file);
+  }
+  if (this->dem.is_precomputing) {
+    position = this->calculateNewPosition();
+    fwrite(&position, 4, 1, this->precomputed_data_file);
+  }
+  return position;
+}
+
+void BOS::insertNode() {
+  int position = this->getNewPosition();
   if (position > -1) {
-    this->bos.Add(newnode, position, remove);
+    this->bos.Add(this->newnode, position, this->remove);
   } else {
     if (position == -1) {
-      this->bos.AddLast(newnode, remove);
-    } else {
-      this->bos.AddFirst(newnode, remove);
+      this->bos.AddLast(this->newnode, this->remove);
+    }
+    if (position == -2) {
+      this->bos.AddFirst(this->newnode, this->remove);
     }
   }
 }

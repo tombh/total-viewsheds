@@ -1,52 +1,30 @@
-#include "LinkedList.h"
 #include <plog/Log.h>
 
-LinkedList::LinkedList() {}
+#include "LinkedList.h"
 
-LinkedList::LinkedList(int x) {
-  LL = new LinkedListNode[x];
-  LinkedList::Clear();
-
-  // Reserved places, so may not be this many nodes, see 'Count'
-  Size = x;
-
-  // Head and tail of a queue for nodes to be added and removed
-  Head = 0;
-  Tail = 0;
-
-  // How many nodes *currently* in the list
-  Count = 0;
-
-  // First and last in order of line of sight sweeps
-  First = 0;
-  Last = 0;
-
-  // -1 is the end of a forward sweep
-  LL[0].next = -1;
-  // -2 is the end of a backward sweep
-  LL[0].prev = -2;
-}
+LinkedList::LinkedList(int x)
+  : LL(new LinkedListNode[x]),
+    Size(x) {}
 
 LinkedList::~LinkedList() {
-  // TODO: Find out who is depending on LL apart from Sector::band_of_sight.
-  //delete [] LL;
+  delete[] this->LL;
 }
 
 void LinkedList::Clear() {
-  Head = 0;
-  Tail = 0;
-  Count = 0;
-  First = 0;
-  Last = 0;
-  LL[0].next = -1;
-  LL[0].prev = -2;
+  this->Count = 0;
+  this->Head = 0;
+  this->Tail = 0;
+  this->First = 0;
+  this->Last = 0;
+  this->LL[0].next = -1;
+  this->LL[0].prev = -2;
 }
 
 void LinkedList::move_queue(bool movehead, bool movetail) {
-  if (movehead) Head = (Head + 1) % Size;
-  if (movetail) Tail = (Tail + 1) % Size;
-  if (movehead && !movetail) Count++;
-  if (!movehead && movetail) Count--;
+  if (movehead) this->Head = (this->Head + 1) % this->Size;
+  if (movetail) this->Tail = (this->Tail + 1) % this->Size;
+  if (movehead && !movetail) this->Count++;
+  if (!movehead && movetail) this->Count--;
 }
 
 int LinkedList::Next(int j) { return LL[j].next; }
@@ -57,12 +35,12 @@ void LinkedList::Add(node node, int pos, bool remove) {
   int tn = -3, tp = -3;
   bool replace = false;
   if (remove) {
-    tn = LL[Tail].next;
-    tp = LL[Tail].prev;
-    replace = (Tail == pos) || (LL[Tail].prev == pos);
+    tn = this->LL[this->Tail].next;
+    tp = this->LL[this->Tail].prev;
+    replace = (this->Tail == pos) || (this->LL[this->Tail].prev == pos);
   }
 
-  LL[Head].Value = node;  // by value
+  this->LL[this->Head].Value = node;  // by value
 
   if (!remove) {
     simpleinsert(pos);
@@ -80,75 +58,65 @@ void LinkedList::Add(node node, int pos, bool remove) {
 }
 
 void LinkedList::FirstNode(node node) {
-  LL[Head].Value = node;
+  this->LL[this->Head].Value = node;
   move_queue(true, false);
 }
 
 void LinkedList::AddFirst(node node, bool remove) {
-  int tp = -3;
-  int tn = -3;
-  tn = LL[Tail].next;
-  tp = LL[Tail].prev;
+  int tp = this->LL[this->Tail].prev;
+  int tn = this->LL[this->Tail].next;
   bool removing_first = (tp == -2) && remove;
-  if (removing_first) tp = Head;
+  if (removing_first) tp = this->Head;
 
-  LL[Head].Value = node;
-  LL[Head].prev = -2;
+  this->LL[this->Head].Value = node;
+  this->LL[this->Head].prev = -2;
   if (!removing_first) {
-    LL[Head].next = First;
-    LL[First].prev = Head;
+    this->LL[this->Head].next = this->First;
+    this->LL[this->First].prev = this->Head;
   }
   if (remove) removelinks(tp, tn);  // remove first
-  First = Head;
+  this->First = this->Head;
   move_queue(true, remove);
 }
 
 void LinkedList::AddLast(node node, bool remove) {
-  int tp = -3;
-  int tn = -3;
-  tn = LL[Tail].next;
-  tp = LL[Tail].prev;
+  int tp = this->LL[this->Tail].prev;
+  int tn = this->LL[this->Tail].next;
   bool removing_last = (tn == -1) && remove;
-  if (removing_last) tn = Head;
+  if (removing_last) tn = this->Head;
 
-  LL[Head].Value = node;
-  LL[Head].next = -1;
+  this->LL[this->Head].Value = node;
+  this->LL[this->Head].next = -1;
   if (!removing_last) {
-    LL[Head].prev = Last;
-    LL[Last].next = Head;
+    this->LL[this->Head].prev = this->Last;
+    this->LL[this->Last].next = this->Head;
   }
   if (remove) removelinks(tp, tn);  // remove first
-  Last = Head;
+  this->Last = this->Head;
   move_queue(true, remove);
 }
 
 void LinkedList::Remove_one() {
-  int tp = LL[Tail].prev;
-  int tn = LL[Tail].next;
+  int tp = this->LL[this->Tail].prev;
+  int tn = this->LL[this->Tail].next;
   removelinks(tp, tn);
-}
-
-void LinkedList::Remove_two() {
-  Remove_one();
-  move_queue(false, true);
-  Remove_one();
   move_queue(false, true);
 }
 
 void LinkedList::simpleinsert(int pos) {
-  LL[Head].prev = pos;
-  LL[Head].next = LL[pos].next;
-  LL[pos].next = Head;
-  LL[LL[Head].next].prev = Head;
+  this->LL[this->Head].prev = pos;
+  this->LL[this->Head].next = this->LL[pos].next;
+  this->LL[pos].next = this->Head;
+  this->LL[this->LL[this->Head].next].prev = this->Head;
 }
 
 void LinkedList::removelinks(int prv, int nxt) {
   if (prv != -2)
-    LL[prv].next = nxt;
+    this->LL[prv].next = nxt;
   else
-    First = nxt;
+    this->First = nxt;
   if (nxt != -1)
-    LL[nxt].prev = prv;
+    this->LL[nxt].prev = prv;
   else
-    Last = prv;
+    this->Last = prv;
 }

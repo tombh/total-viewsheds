@@ -2,8 +2,6 @@
 
 #include <plog/Log.h>
 
-#include "Axes.h"
-#include "BOS.h"
 #include "Compute.h"
 #include "DEM.h"
 #include "Output.h"
@@ -18,8 +16,16 @@ Compute::Compute()
       sector(Sector(dem)) {}
 
 void Compute::initialize() {
+  this->ensureDEMIsSquare();
   helper::createDirectories();
   this->sector.initialize();
+}
+
+void Compute::ensureDEMIsSquare() {
+  if (dem.width != dem.height) {
+    printf("Only square DEMs are currently supported.\n");
+    exit(1);
+  }
 }
 
 void Compute::forcePreCompute() {

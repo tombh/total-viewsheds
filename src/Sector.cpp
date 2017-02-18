@@ -59,15 +59,14 @@ Sector::~Sector() {
 void Sector::loopThroughBands() {
   this->openPreComputedDataFile();
   this->bos_manager.setup(this->precomputed_data_file);
-  // sweepS() takes points ordered in sector-based order
   for (int point = 0; point < this->dem.size; point++) {
+    this->bos_manager.adjustToNextPoint(point);
     if (this->dem.is_computing) {
       this->sweepS();
       this->storers(
-        this->bos_manager.bos.LL[this->bos_manager.pov].Value.idx
+        this->dem.nodes_sector_ordered[point]
       );
     }
-    this->bos_manager.adjustToNextPoint(point);
   }
   fclose(this->precomputed_data_file);
 }
@@ -104,6 +103,7 @@ void Sector::setHeights() {
       this->dem.nodes[point].h = (float)num / this->dem.scale;  // decameters
     }
   }
+  fclose(f);
 }
 
 // TODO: This should be in BOS
