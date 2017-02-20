@@ -1,4 +1,5 @@
 #include <math.h>
+#include <chrono>
 
 #include <plog/Log.h>
 
@@ -21,6 +22,7 @@ Sector::Sector(DEM &dem)
       bos_manager(BOS(dem)) {}
 
 void Sector::initialize() {
+  this->timestamp = std::chrono::high_resolution_clock::now();
   if (this->dem.is_computing) {
     this->surfaceF = new float[this->dem.size];
     this->surfaceB = new float[this->dem.size];
@@ -65,6 +67,7 @@ void Sector::loopThroughBands() {
       this->sweepS();
       this->storers(this->dem.nodes_sector_ordered[point]);
     }
+    this->progressUpdate();
   }
   fclose(this->precomputed_data_file);
 }
@@ -99,8 +102,7 @@ void Sector::setHeights() {
 
         // Why divide by SCALE?
         // Surely this will effect spherical earth based calculations?
-        this->dem.nodes[point].h =
-          (float)num / this->dem.scale;  // decameters
+        this->dem.nodes[point].h = (float)num / this->dem.scale;  // decameters
       }
     }
   }
@@ -110,7 +112,7 @@ void Sector::setHeights() {
 // Rather than getting into the whole gdal lib (which is amazing
 // but a little complex) let's just hack the existing header for
 // the TVS output.
-void Sector::extractBTHeader(FILE *input_file){
+void Sector::extractBTHeader(FILE *input_file) {
   FILE *output_file;
   unsigned char header[256];
   short tvs_point_size = 4;
@@ -205,6 +207,18 @@ void Sector::recordsectorRS() {
   for (int point = 0; point < this->dem.size; point++) {
     delete[] this->rsectorF[point];
     delete[] this->rsectorB[point];
+  }
+}
+
+void Sector::progressUpdate() {
+  using namespace std::chrono;
+  high_resolution_clock::time_point now = high_resolution_clock::now();
+  duration<double> elapsed = duration_cast<duration<double>>(now - this->timestamp);
+  if (elapsed.count() > 1) {
+    printf("sector: %d, point: %d", this->sector_angle, this->bos_manager.current_point);
+    printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+    fflush(stdout);
+    this->timestamp = now;
   }
 }
 

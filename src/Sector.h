@@ -1,4 +1,5 @@
 #include <string>
+#include <chrono>
 
 #include "DEM.h"
 #include "BOS.h"
@@ -48,6 +49,8 @@ class Sector {
   int nrsF;
   int nrsB;
 
+  std::chrono::high_resolution_clock::time_point timestamp;
+
   Sector(DEM&);
   ~Sector();
 
@@ -60,6 +63,7 @@ class Sector {
 
   int presweepF();
   int presweepB();
+  void progressUpdate();
   void sweepS();
   void sweepInit();
   void sweepForward();
