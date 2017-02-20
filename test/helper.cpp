@@ -19,6 +19,8 @@ void createMockDEM(const int dem[]) {
   int row_step, col_step, i;
   FILE* f;
   f = fopen(INPUT_DEM_FILE.c_str(), "wb");
+  // Skip the header as if it were there
+  fseek(f, 256, SEEK_SET);
 
   if (f == NULL) {
     throw "Error opening mock DEM, tests should be run from the base "

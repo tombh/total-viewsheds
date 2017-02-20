@@ -15,10 +15,18 @@ namespace TVS {
 Output::Output(DEM &dem) : dem(dem) {}
 
 void Output::tvsResults() {
+  int col_step, row_step, point;
   FILE *fs;
   LOG_INFO << "Writing TVS results to file.";
-  fs = fopen(TVS_RESULTS_FILE.c_str(), "wb");
-  fwrite(this->dem.cumulative_surface, this->dem.size, 4, fs);
+  fs = fopen(TVS_RESULTS_FILE.c_str(), "ab");
+  for (int x = 0; x < this->dem.width; x++) {
+    row_step = this->dem.size + x;
+    for (int y = 0; y < this->dem.height; y++) {
+      col_step = ((y + 1) * this->dem.width);
+      point = row_step - col_step;
+      fwrite(&this->dem.cumulative_surface[point], 4, 1, fs);
+    }
+  }
   fclose(fs);
 }
 

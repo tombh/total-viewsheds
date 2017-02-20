@@ -54,6 +54,7 @@ class Sector {
   void initialize();
   void changeAngle(int);
   void setHeights();
+  void extractBTHeader(FILE *);
   void loopThroughBands();
   void storers(int i);
 

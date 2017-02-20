@@ -55,7 +55,7 @@ DEFINE_string(
 
 DEFINE_string(
   tvs_results_file,
-  "tvs.flt",
+  "tvs.bt",
   "Total viewshed values for every point in DEM"
 );
 

@@ -84,6 +84,7 @@ void Sector::setHeights() {
   if (f == NULL) {
     LOG_ERROR << "Error opening: " << INPUT_DEM_FILE;
   } else {
+    this->extractBTHeader(f);
     // The .bt DEM format starts at the bottom left and finishes
     // in the top right.
     int point, row_step, col_step;
@@ -92,11 +93,6 @@ void Sector::setHeights() {
       for (int y = 0; y < this->dem.height; y++) {
         col_step = ((y + 1) * this->dem.width);
         point = row_step - col_step;
-        //This rotates the DEM heights 90 degrees anticlockwise.
-        //As per the .bt DEM format.
-        //int translated_point = (point / this->dem.width) +
-                             //(this->dem.height * (point % this->dem.width));
-
         this->dem.nodes[point].idx = point;
 
         fread(&num, 2, 1, f);
@@ -109,6 +105,28 @@ void Sector::setHeights() {
     }
   }
   fclose(f);
+}
+
+// Rather than getting into the whole gdal lib (which is amazing
+// but a little complex) let's just hack the existing header for
+// the TVS output.
+void Sector::extractBTHeader(FILE *input_file){
+  FILE *output_file;
+  unsigned char header[256];
+  short tvs_point_size = 4;
+  short is_floating_point = 1;
+
+  fread(&header, 256, 1, input_file);
+  output_file = fopen(TVS_RESULTS_FILE.c_str(), "wb");
+  fwrite(&header, 256, 1, output_file);
+
+  // Update header for floating point TVS values
+  fseek(output_file, 18, SEEK_SET);
+  fwrite(&tvs_point_size, 2, 1, output_file);
+  fseek(output_file, 20, SEEK_SET);
+  fwrite(&is_floating_point, 2, 1, output_file);
+
+  fclose(output_file);
 }
 
 // TODO: This should be in BOS
