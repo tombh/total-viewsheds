@@ -22,7 +22,6 @@ void computeDEMFor(DEM*, int);
 void computeBOSFor(Sector*, int, int, std::string);
 void bosLoopToDEMPoint(Sector*, int);
 void bosLoopToSectorPoint(Sector*, int, bool);
-void setNodeIDs(DEM*);
 std::string sectorOrderedDEMPointsToASCII(DEM*);
 std::string sightOrderedDEMPointsToASCII(DEM*);
 std::string nodeDistancesToASCII(DEM*);

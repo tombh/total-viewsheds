@@ -16,8 +16,6 @@ class Sector {
 
   int point;
 
-  FILE *precomputed_data_file;
-  char *precomputed_data_path;
   char *ring_sector_data_path;
   bool is_store_ring_sectors;
 
@@ -56,8 +54,6 @@ class Sector {
 
   void initialize();
   void changeAngle(int);
-  void setHeights();
-  void extractBTHeader(FILE *);
   void loopThroughBands();
   void storers(int i);
 
@@ -72,9 +68,7 @@ class Sector {
 
   void closeprof(bool visible, bool fwd);
   void recordsectorRS();
-  static void preComputedDataPath(char *, int);
   static void ringSectorDataPath(char *, int);
-  void openPreComputedDataFile();
 };
 
 }

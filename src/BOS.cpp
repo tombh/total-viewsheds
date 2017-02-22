@@ -37,15 +37,50 @@ int BOS::ensureBandSizeIsOdd(int requested_band_size) {
   return requested_band_size;
 }
 
+void BOS::openPreComputedDataFile() {
+  const char *mode;
+  char path[100];
+  this->preComputedDataPath(path, this->sector_angle);
+  if (this->dem.is_precomputing) {
+    mode = "wb";
+  } else {
+    mode = "rb";
+  }
+  this->precomputed_data_file = fopen(path, mode);
+  if (this->precomputed_data_file == NULL) {
+    LOG_ERROR << "Couldn't open " << path
+              << " for sector_angle: " << this->sector_angle;
+    throw "Couldn't open file.";
+  }
+}
+
+void BOS::preComputedDataPath(char *path_ptr, int sector_angle) {
+  sprintf(path_ptr, "%s/%d.bin", SECTOR_DIR.c_str(), sector_angle);
+}
+
 // Set the band of sight up for the very first time, namely after a sector angle
 // change.
-void BOS::setup(FILE *precomputed_data_file) {
+void BOS::setup(int sector_angle) {
+  this->positions = new int[this->dem.size];
+  this->sector_angle = sector_angle;
   this->half_band_size = (this->band_size - 1) / 2;
-  this->precomputed_data_file = precomputed_data_file;
+  this->current_point = 0;
+  this->openPreComputedDataFile();
+  if(this->dem.is_computing) {
+    fread(this->positions, 4, this->dem.size, this->precomputed_data_file);
+  }
   this->pov = 0;
   this->bos.Clear();
   int first_ordered_node = this->dem.nodes_sector_ordered[0];
   this->bos.FirstNode(this->dem.nodes[first_ordered_node]);
+}
+
+void BOS::writeAndClose() {
+  if (this->dem.is_precomputing && this->current_point == this->dem.size - 1) {
+    fwrite(this->positions, 4, this->dem.size, this->precomputed_data_file);
+  }
+  fclose(this->precomputed_data_file);
+  delete[] this->positions;
 }
 
 // Set the index of the currently analysed point to be relative to the band
@@ -132,11 +167,11 @@ int BOS::calculateNewPosition() {
 int BOS::getNewPosition() {
   int position;
   if (this->dem.is_computing) {
-    fread(&position, 4, 1, this->precomputed_data_file);
+    position = this->positions[this->newnode.idx];
   }
   if (this->dem.is_precomputing) {
     position = this->calculateNewPosition();
-    fwrite(&position, 4, 1, this->precomputed_data_file);
+    this->positions[this->newnode.idx] = position;
   }
   return position;
 }

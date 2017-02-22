@@ -59,8 +59,7 @@ Sector::~Sector() {
 }
 
 void Sector::loopThroughBands() {
-  this->openPreComputedDataFile();
-  this->bos_manager.setup(this->precomputed_data_file);
+  this->bos_manager.setup(this->sector_angle);
   for (int point = 0; point < this->dem.size; point++) {
     this->bos_manager.adjustToNextPoint(point);
     if (this->dem.is_computing) {
@@ -69,7 +68,7 @@ void Sector::loopThroughBands() {
     }
     this->progressUpdate();
   }
-  fclose(this->precomputed_data_file);
+  this->bos_manager.writeAndClose();
 }
 
 void Sector::changeAngle(int sector_angle) {
@@ -77,76 +76,6 @@ void Sector::changeAngle(int sector_angle) {
   this->sector_angle = sector_angle;
   Axes axes = Axes(this->dem);
   axes.adjust(sector_angle);
-}
-
-// TODO: This should be in DEM
-void Sector::setHeights() {
-  FILE *f;
-  unsigned short num;
-  f = fopen(INPUT_DEM_FILE.c_str(), "rb");
-  if (f == NULL) {
-    LOG_ERROR << "Error opening: " << INPUT_DEM_FILE;
-  } else {
-    this->extractBTHeader(f);
-    // The .bt DEM format starts at the bottom left and finishes
-    // in the top right.
-    int point, row_step, col_step;
-    for (int x = 0; x < this->dem.width; x++) {
-      row_step = this->dem.size + x;
-      for (int y = 0; y < this->dem.height; y++) {
-        col_step = ((y + 1) * this->dem.width);
-        point = row_step - col_step;
-        this->dem.nodes[point].idx = point;
-
-        fread(&num, 2, 1, f);
-
-        // Why divide by SCALE?
-        // Surely this will effect spherical earth based calculations?
-        this->dem.nodes[point].h = (float)num / this->dem.scale;  // decameters
-      }
-    }
-  }
-  fclose(f);
-}
-
-// Rather than getting into the whole gdal lib (which is amazing
-// but a little complex) let's just hack the existing header for
-// the TVS output.
-void Sector::extractBTHeader(FILE *input_file) {
-  FILE *output_file;
-  unsigned char header[256];
-  short tvs_point_size = 4;
-  short is_floating_point = 1;
-
-  fread(&header, 256, 1, input_file);
-  output_file = fopen(TVS_RESULTS_FILE.c_str(), "wb");
-  fwrite(&header, 256, 1, output_file);
-
-  // Update header for floating point TVS values
-  fseek(output_file, 18, SEEK_SET);
-  fwrite(&tvs_point_size, 2, 1, output_file);
-  fseek(output_file, 20, SEEK_SET);
-  fwrite(&is_floating_point, 2, 1, output_file);
-
-  fclose(output_file);
-}
-
-// TODO: This should be in BOS
-void Sector::openPreComputedDataFile() {
-  const char *mode;
-  char path[100];
-  this->preComputedDataPath(path, this->sector_angle);
-  if (this->dem.is_precomputing) {
-    mode = "wb";
-  } else {
-    mode = "rb";
-  }
-  this->precomputed_data_file = fopen(path, mode);
-  if (this->precomputed_data_file == NULL) {
-    LOG_ERROR << "Couldn't open " << path
-              << " for sector_angle: " << this->sector_angle;
-    throw "Couldn't open file.";
-  }
 }
 
 // Fulldata to store ring sector topology
@@ -357,10 +286,6 @@ void Sector::closeprof(bool visible, bool fwd) {
 
 void Sector::ringSectorDataPath(char *path_ptr, int sector_angle) {
   sprintf(path_ptr, "%s/%d.bin", RING_SECTOR_DIR.c_str(), sector_angle);
-}
-
-void Sector::preComputedDataPath(char *path_ptr, int sector_angle) {
-  sprintf(path_ptr, "%s/%d.bin", SECTOR_DIR.c_str(), sector_angle);
 }
 
 }  // namespace TVS

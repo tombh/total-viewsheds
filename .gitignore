@@ -5,6 +5,9 @@ etc/rsector/*
 etc/bin/*
 test/etc
 
+callgrind.out*
+cachegrind.out*
+
 include/*
 
 *.bil

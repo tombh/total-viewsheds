@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "LinkedList.h"
 
 #ifndef DEM_H
@@ -20,6 +21,9 @@ class DEM {
 
   DEM();
   ~DEM();
+  void setHeights();
+  void setNodeIDs();
+  void extractBTHeader(FILE*);
   float maxViewshedValue();
   float minViewshedValue();
   void prepareForCompute();

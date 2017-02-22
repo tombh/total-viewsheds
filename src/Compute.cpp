@@ -44,8 +44,9 @@ void Compute::run() {
   if (this->dem.is_computing) {
     LOG_INFO << "Starting main computation.";
     this->dem.prepareForCompute();
-    this->sector.setHeights();
+    this->dem.setHeights();
   } else {
+    this->dem.setNodeIDs();
     LOG_INFO << "Starting precomputation.";
   }
 

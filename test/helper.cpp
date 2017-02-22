@@ -81,12 +81,6 @@ void computeDEMFor(DEM *dem, int angle) {
   axes.adjust(angle);
 }
 
-void setNodeIDs(DEM *dem) {
-  for (int point = 0; point < dem->size; point++) {
-    dem->nodes[point].idx = point;
-  }
-}
-
 std::string sectorOrderedDEMPointsToASCII(DEM *dem) {
   std::stringstream out;
   int inverted[dem->size];
@@ -124,17 +118,16 @@ std::string nodeDistancesToASCII(DEM *dem) {
 }
 
 void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
-  setNodeIDs(&sector->dem);
+  sector->dem.setNodeIDs();
   Axes axes = Axes(sector->dem);
   axes.adjust(angle);
   sector->dem.setToPrecompute();
   sector->sector_angle = angle;
-  sector->openPreComputedDataFile();
-  sector->bos_manager.setup(sector->precomputed_data_file);
+  sector->bos_manager.setup(angle);
   if (ordering == "dem-indexed") bosLoopToDEMPoint(sector, point);
   if (ordering == "sector-indexed") bosLoopToSectorPoint(sector, point, false);
   if (ordering == "sector-indexed!") bosLoopToSectorPoint(sector, point, true);
-  fclose(sector->precomputed_data_file);
+  sector->bos_manager.writeAndClose();
 }
 
 void bosLoopToDEMPoint(Sector *sector, int dem_point) {
@@ -212,7 +205,7 @@ std::string sweepToASCII(Sector *sector, std::string direction){
 
 void computeSweepFor(Compute *compute, std::string direction, int angle, int point) {
   FLAGS_is_store_ring_sectors = true;
-  compute->sector.setHeights();
+  compute->dem.setHeights();
   computeBOSFor(&compute->sector, angle, point, "dem-indexed");
   compute->sector.sweepInit();
   if (direction == "forward") {
