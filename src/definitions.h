@@ -15,7 +15,6 @@ DECLARE_string(log_file);
 DECLARE_string(input_dem_file);
 DECLARE_string(tvs_results_file);
 DECLARE_string(tvs_png_file);
-DECLARE_int32(threads);
 DECLARE_bool(is_store_ring_sectors);
 DECLARE_int32(total_sectors);
 DECLARE_int32(dem_width);
@@ -24,7 +23,9 @@ DECLARE_double(dem_scale);
 DECLARE_double(observer_height);
 DECLARE_double(sector_shift);
 DECLARE_int32(band_size);
+DECLARE_int32(max_line_of_sight);
 DECLARE_int32(size_of_tvs_png_palette);
+DECLARE_int32(cl_device);
 
 extern std::string ETC_DIR;
 extern std::string INPUT_DIR;
@@ -36,6 +37,7 @@ extern std::string TVS_RESULTS_FILE;
 extern std::string TVS_PNG_FILE;
 extern const double TO_RADIANS;
 extern const float PI_F;
+extern const int EARTH_CONST;
 
 }
 

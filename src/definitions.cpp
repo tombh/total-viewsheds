@@ -79,14 +79,19 @@ DEFINE_int32(
 
 DEFINE_double(
   dem_scale,
-  10,
+  30,
   "Size of each point in the DEM in meters"
 );
 
 DEFINE_int32(
-  threads,
-  1,
-  "Number of threads to do simultaneous sector calculations in"
+  max_line_of_sight,
+  1000,
+  "The maximum distance in metres to search for visible points."
+  "For a TVS calculation to be truly correct, it must have access"
+  "to all the DEM data around it that may possibly be visible to it."
+  "However, the further the distances searched the exponentially"
+  "greater the computations required. Note that the largest"
+  "currently known line of sight int he world is 538km."
 );
 
 DEFINE_int32(
@@ -134,6 +139,12 @@ DEFINE_int32(
   "The quality of the gradient used to create the final TVS PNG image"
 );
 
+DEFINE_int32(
+  cl_device,
+  0,
+  "The device to use for computations. Eg; see `clinfo` for available devices"
+);
+
 // The following are built up from multiple FLAGS_*
 std::string ETC_DIR;
 std::string INPUT_DIR;
@@ -149,5 +160,9 @@ const double TO_RADIANS = (2 * M_PI) / 360;
 
 // Float-type version of PI
 const float PI_F = 3.14159265358979f;
+
+// Constant for calculating elevation offset for a curved earth.
+// It is the radius of the earth in metres multipled by 2.
+const int EARTH_CONST = 6371000 * 2;
 }
 

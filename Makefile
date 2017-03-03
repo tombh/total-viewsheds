@@ -9,8 +9,8 @@ else
   CXX = g++
 endif
 
-CFLAGS += -std=c++11 -openmp -O3 -g
-LDFLAGS = -std=c++11 -L. -openmp -O3
+CFLAGS += -std=c++11 -O3 -g -lOpenCL
+LDFLAGS = -std=c++11 -L. -O3 -lOpenCL
 LINKER_FLAGS = include/gflags/libgflags.a -lpthread
 
 APPS = tvs tvs-test
@@ -87,7 +87,6 @@ download-libs:
 	$(call getLibFromGithub,SergiusTheBest/plog,e82f39a,include/plog)
 	$(call getLibFromGithub,bombela/backward-cpp,7693dd9,backward.hpp)
 	$(call getLibFromGithub,philsquared/catch,d4ae1b1,single_include)
-	$(call getLibFromGithub,lvandeve/lodepng,8a0f16a,lodepng.h lodepng.cpp)
 	$(call getLibFromGithub,gflags/gflags,30dbc81,.)
 	$(call installGflags)
 

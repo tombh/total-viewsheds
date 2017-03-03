@@ -27,6 +27,11 @@ std::string sightOrderedDEMPointsToASCII(DEM*);
 std::string nodeDistancesToASCII(DEM*);
 std::string bosToASCII(Sector*);
 std::string sweepToASCII(Sector*, std::string);
+Compute reconstructBandsForSector(int);
+std::string reconstructedBandsToASCII(int);
 void computeSweepFor(Compute*, std::string, int, int);
+std::string bandStructureToASCII(int, int, std::string*);
+std::string bandStructureToASCII(int, int, int*);
+std::string bandStructureToASCII(int, int, float*);
 
 #endif

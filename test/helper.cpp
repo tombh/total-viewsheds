@@ -7,17 +7,21 @@
 #include <stdexcept>
 #include <string>
 
-#include "../src/definitions.h"
-#include "../src/helper.h"
+#include "../src/Axes.h"
 #include "../src/DEM.h"
 #include "../src/Sector.h"
-#include "../src/Axes.h"
+#include "../src/definitions.h"
+#include "../src/helper.h"
 #include "helper.h"
 
 // Create a fake DEM for testing purposes
 void createMockDEM(const int dem[]) {
+  FLAGS_max_line_of_sight = 3;
+  FLAGS_dem_scale = 1;
+  FLAGS_dem_width = 9;
+  FLAGS_dem_height = 9;
   int row_step, col_step, i;
-  FILE* f;
+  FILE *f;
   f = fopen(INPUT_DEM_FILE.c_str(), "wb");
   // Skip the header as if it were there
   fseek(f, 256, SEEK_SET);
@@ -27,10 +31,10 @@ void createMockDEM(const int dem[]) {
           "project path.";
   } else {
     // Convert to .bt format
-    for (int x = 0; x < 5; x++) {
-      row_step = 25 + x;
-      for (int y = 0; y < 5; y++) {
-        col_step = (y + 1) * 5;
+    for (int x = 0; x < FLAGS_dem_width; x++) {
+      row_step = (FLAGS_dem_width * FLAGS_dem_width) + x;
+      for (int y = 0; y < FLAGS_dem_width; y++) {
+        col_step = (y + 1) * FLAGS_dem_width;
         i = row_step - col_step;
         fwrite(&dem[i], 2, 1, f);
       }
@@ -40,7 +44,7 @@ void createMockDEM(const int dem[]) {
 }
 
 // System command with output
-std::string exec(const char* cmd) {
+std::string exec(const char *cmd) {
   std::array<char, 128> buffer;
   std::string result;
   std::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
@@ -52,6 +56,7 @@ std::string exec(const char* cmd) {
 }
 
 void setFLAGDefaults() {
+  FLAGS_dem_scale = 1;
   FLAGS_dem_width = 5;
   FLAGS_dem_height = 5;
   FLAGS_is_store_ring_sectors = false;
@@ -59,7 +64,7 @@ void setFLAGDefaults() {
 
 void emptyDirectories() {
   std::stringstream cmd;
-  if(std::string(ETC_DIR).find(".") != 0){
+  if (std::string(ETC_DIR).find(".") != 0) {
     throw "Not deleting unexpected ETC_DIR path";
   }
   cmd << "rm -rf " << ETC_DIR;
@@ -72,9 +77,7 @@ void setup() {
   helper::createDirectories();
 }
 
-void tearDown() {
-  emptyDirectories();
-}
+void tearDown() { emptyDirectories(); }
 
 void computeDEMFor(DEM *dem, int angle) {
   Axes axes = Axes(*dem);
@@ -85,11 +88,10 @@ std::string sectorOrderedDEMPointsToASCII(DEM *dem) {
   std::stringstream out;
   int inverted[dem->size];
   for (int point = 0; point < dem->size; point++) {
-    inverted[dem->nodes_sector_ordered[point]] = point;
+    inverted[dem->sector_ordered[point]] = point;
   }
   for (int point = 0; point < dem->size; point++) {
-    out << std::right << std::setw(3) << std::setfill(' ')
-      << std::to_string(inverted[point]);
+    out << std::right << std::setw(3) << std::setfill(' ') << std::to_string(inverted[point]);
     if ((point % dem->width) == (dem->width - 1)) out << "\n";
   }
   out << "\n";
@@ -99,8 +101,7 @@ std::string sectorOrderedDEMPointsToASCII(DEM *dem) {
 std::string sightOrderedDEMPointsToASCII(DEM *dem) {
   std::stringstream out;
   for (int point = 0; point < dem->size; point++) {
-    out << std::right << std::setw(3) << std::setfill(' ')
-      << std::to_string(dem->nodes[point].sight_ordered_index);
+    out << std::right << std::setw(3) << std::setfill(' ') << std::to_string(dem->sight_ordered[point]);
     if ((point % dem->width) == (dem->width - 1)) out << "\n";
   }
   out << "\n";
@@ -110,7 +111,7 @@ std::string sightOrderedDEMPointsToASCII(DEM *dem) {
 std::string nodeDistancesToASCII(DEM *dem) {
   std::stringstream out;
   for (int point = 0; point < dem->size; point++) {
-    out << std::to_string(dem->nodes[point].d) << " ";
+    out << std::to_string(dem->distances[point]) << " ";
     if ((point % dem->width) == (dem->width - 1)) out << "\n";
   }
   out << "\n";
@@ -118,7 +119,6 @@ std::string nodeDistancesToASCII(DEM *dem) {
 }
 
 void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
-  sector->dem.setNodeIDs();
   Axes axes = Axes(sector->dem);
   axes.adjust(angle);
   sector->dem.setToPrecompute();
@@ -130,11 +130,75 @@ void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
   sector->bos_manager.writeAndClose();
 }
 
+Compute reconstructBandsForSector(int angle) {
+  Compute compute = Compute();
+  compute.forcePreCompute();
+  compute.dem.setToCompute();
+  compute.dem.prepareForCompute();
+  compute.sector.prepareForCompute();
+  compute.sector.changeAngle(angle);
+  compute.sector.loopThroughBands();
+  return compute;
+}
+
+std::string reconstructedBandsToASCII(int angle) {
+  Compute compute = reconstructBandsForSector(angle);
+  int band_size = compute.sector.bos_manager.computable_band_size;
+  int points = compute.dem.computable_points_count;
+  int *bands = compute.sector.bos_manager.bands;
+  return bandStructureToASCII(points, band_size, bands);
+}
+
+std::string bandStructureToASCII(int points, int band_size, std::string *bands) {
+  std::stringstream out;
+  out << "\n";
+  for (int point = 0; point < points; point++) {
+    int marker = point * 2 * band_size;
+
+    int front_start = marker + band_size - 1;
+    int front_end = marker;
+    for (int iband = front_start; iband >= front_end; iband--) {
+      out << bands[iband];
+    }
+
+    int back_start = marker + band_size;
+    int back_end = marker + (2 * band_size);
+    for (int iband = back_start; iband < back_end; iband++) {
+      out << bands[iband];
+    }
+    out << "\n";
+  }
+  out << "\n";
+  return out.str();
+}
+
+std::string bandStructureToASCII(int points, int band_size, float *bands_raw) {
+  int array_size = points * band_size * 2;
+  std::string bands[array_size];
+  for(int i = 0; i < array_size; i++) {
+    std::stringstream value;
+    value << std::setprecision(2) << std::setw(8) << bands_raw[i];
+    bands[i] = value.str();
+  }
+  return bandStructureToASCII(points, band_size, bands);
+}
+
+std::string bandStructureToASCII(int points, int band_size, int *bands_raw) {
+  int array_size = points * band_size * 2;
+  std::string bands[array_size];
+  for(int i = 0; i < array_size; i++) {
+    std::stringstream value;
+    value << std::setw(3) << bands_raw[i];
+    bands[i] = value.str();
+  }
+  return bandStructureToASCII(points, band_size, bands);
+}
+
 void bosLoopToDEMPoint(Sector *sector, int dem_point) {
   for (int i = 0; i < sector->dem.size; i++) {
     sector->bos_manager.adjustToNextPoint(i);
-    int idx = sector->bos_manager.bos.LL[sector->bos_manager.pov].Value.idx;
-    if(idx == dem_point) break;
+    int idx = sector->bos_manager.bos.LL[sector->bos_manager.pov].dem_id;
+    if (idx == dem_point) break;
   }
 }
 
@@ -154,20 +218,20 @@ std::string bosToASCII(Sector *sector) {
   std::stringstream out;
   out << std::fixed;
   out.precision(5);
-  LinkedList::LinkedListNode node;
-  for(int i = 0; i < sector->bos_manager.bos.Count; i++){
-    node = sector->bos_manager.bos.LL[i];
+  LinkedList::LinkedListNode point;
+  for (int i = 0; i < sector->bos_manager.bos.Count; i++) {
+    point = sector->bos_manager.bos.LL[i];
     out << std::left << std::setw(2) << i;
-    out << std::left << std::setw(3) << node.Value.idx;
-    out << std::left << std::setw(3) << node.Value.sight_ordered_index;
-    out << std::left << std::setw(8) << node.Value.d;
-    out << std::right << std::setw(3) << node.prev;
-    out << std::right << std::setw(3) << node.next << " ";
-    if(i == sector->bos_manager.pov) out << "P";
-    if(i == sector->bos_manager.bos.First) out << "F";
-    if(i == sector->bos_manager.bos.Last) out << "L";
-    if(i == sector->bos_manager.bos.Head) out << "H";
-    if(i == sector->bos_manager.bos.Tail) out << "T";
+    out << std::left << std::setw(3) << point.dem_id;
+    out << std::left << std::setw(3) << sector->dem.sight_ordered[point.dem_id];
+    out << std::left << std::setw(8) << sector->dem.distances[point.dem_id];
+    out << std::right << std::setw(3) << point.prev;
+    out << std::right << std::setw(3) << point.next << " ";
+    if (i == sector->bos_manager.pov) out << "P";
+    if (i == sector->bos_manager.bos.First) out << "F";
+    if (i == sector->bos_manager.bos.Last) out << "L";
+    if (i == sector->bos_manager.bos.Head) out << "H";
+    if (i == sector->bos_manager.bos.Tail) out << "T";
     out << "\n";
   }
   out << "H=" << sector->bos_manager.bos.Head;
@@ -175,9 +239,9 @@ std::string bosToASCII(Sector *sector) {
   return out.str();
 }
 
-std::string sweepToASCII(Sector *sector, std::string direction){
+std::string sweepToASCII(Sector *sector, std::string direction) {
   std::stringstream out;
-  LinkedList::LinkedListNode node;
+  LinkedList::LinkedListNode point;
   int end;
   int sweep = sector->bos_manager.pov;
   if (direction == "forward") {
@@ -189,32 +253,17 @@ std::string sweepToASCII(Sector *sector, std::string direction){
     exit(1);
   }
 
-  while(sweep != end){
-    node = sector->bos_manager.bos.LL[sweep];
-    out << std::left << std::setw(3) << node.Value.idx;
-    out << std::left << std::setw(4) << node.Value.h;
+  while (sweep != end) {
+    point = sector->bos_manager.bos.LL[sweep];
+    out << std::left << std::setw(3) << point.dem_id;
+    out << std::left << std::setw(4) << sector->dem.elevations[point.dem_id];
     out << "\n";
     if (direction == "forward") {
-      sweep = node.next;
+      sweep = point.next;
     } else if (direction == "backward") {
-      sweep = node.prev;
+      sweep = point.prev;
     }
   }
   return out.str();
-}
-
-void computeSweepFor(Compute *compute, std::string direction, int angle, int point) {
-  FLAGS_is_store_ring_sectors = true;
-  compute->dem.setHeights();
-  computeBOSFor(&compute->sector, angle, point, "dem-indexed");
-  compute->sector.sweepInit();
-  if (direction == "forward") {
-    compute->sector.sweepForward();
-  } else if (direction == "backward") {
-    compute->sector.sweepBackward();
-  } else {
-    LOGE << "Sweep direction neither forward nor backward";
-    exit(1);
-  }
 }
 

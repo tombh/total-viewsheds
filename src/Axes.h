@@ -16,15 +16,15 @@ class Axes {
   void sortByDistanceFromHorizontalAxis();
 
  private:
+  double shift_angle;
   double *isin;
   double *icos;
-  double *icot;
   double *itan;
+  double *icot;
   int *tmp1;
   int *tmp2;
   int quad;
   int sector_angle;
-  double shift_angle;
   double computable_angle;
 
   void preComputeTrig();

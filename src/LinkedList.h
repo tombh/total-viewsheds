@@ -3,21 +3,9 @@
 
 class LinkedList {
  public:
-  struct node {
-    // Identifier of point.
-    int idx;
-    // Position of node relative to rotated sector y-axis. Used when
-    // deciding the position of a new node in the Band of Sight.
-    int sight_ordered_index;
-    // Height of point in DEM (scaled relative to 1 unit of each DEM)
-    float h;
-    // Distance from sector's base x-axis
-    float d;
-  };
-
   struct LinkedListNode {
    public:
-    LinkedList::node Value;
+    int dem_id;
     short next;  // Identifier the next node in Linked List.
     short prev;  // Identifier the Previous node in Linked List.
   };
@@ -34,17 +22,15 @@ class LinkedList {
 
   LinkedList(int x);  // Create de Linked List with size x
   ~LinkedList();
-  void Clear();       // Initializing the Linked list and the first node
+  void Clear();                                   // Initializing the Linked list and the first node
   void move_queue(bool movehead, bool movetail);  // Circular queue behavior
-  int Next(int j);  // Return which is the next node
-  int Prev(int j);  // Return which is the Previous node
-  void Add(node node, int pos, bool remove);  // Add new node to linked list
-  void AddFirst(node node,
-                bool remove);  // Add new node to linked list, at the beginning
-  void AddLast(node node,
-               bool remove);  // Add new node to linked list, at the end
-  void FirstNode(node node);  // Add new node to linked list
-  void Remove_one();  // Remove two node of list when we are exit the list
+  int Next(int j);                                // Return which is the next node
+  int Prev(int j);                                // Return which is the Previous node
+  void Add(int dem_id, int pos, bool remove);     // Add new node to linked list
+  void AddFirst(int dem_id, bool remove);         // Add new node to linked list, at the beginning
+  void AddLast(int dem_id, bool remove);          // Add new node to linked list, at the end
+  void FirstNode(int dem_id);                     // Add new node to linked list
+  void Remove_one();                              // Remove two node of list when we are exit the list
   void removelinks(int prv, int nxt);
   void simpleinsert(int pos);
 };

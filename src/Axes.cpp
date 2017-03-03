@@ -2,8 +2,8 @@
 
 #include <plog/Log.h>
 
-#include "DEM.h"
 #include "Axes.h"
+#include "DEM.h"
 #include "definitions.h"
 
 namespace TVS {
@@ -69,6 +69,7 @@ void Axes::adjust(int sector_angle) {
 }
 
 // Orthogonal distance of points relative to the initial Band of Sight.
+// TODO: Can these not be used to populate the sight_ordered index?
 // O(N)
 void Axes::setDistancesFromVerticalAxis() {
   double val;
@@ -79,7 +80,7 @@ void Axes::setDistancesFromVerticalAxis() {
       } else {
         val = this->icos[x] + this->isin[y];
       }
-      this->dem.nodes[x * this->dem.height + y].d = val;
+      this->dem.distances[x * this->dem.height + y] = (float)(val * dem.scale);
     }
   }
 }
@@ -121,13 +122,11 @@ void Axes::preSort() {
   ct = 1 / tn;
   // O(N / height)
   for (int j = 1; j < this->dem.width; j++) {
-    this->tmp1[j] =
-        this->tmp1[j - 1] + (int)std::min(this->dem.height, (int)floor(ct * j));
+    this->tmp1[j] = this->tmp1[j - 1] + (int)std::min(this->dem.height, (int)floor(ct * j));
   }
   // O(N / width)
   for (int i = 1; i < this->dem.height; i++) {
-    this->tmp2[i] =
-        this->tmp2[i - 1] + (int)std::min(this->dem.width, (int)floor(tn * i));
+    this->tmp2[i] = this->tmp2[i - 1] + (int)std::min(this->dem.width, (int)floor(tn * i));
   }
 }
 
@@ -146,23 +145,21 @@ void Axes::sort() {
       y = (i - 1);
       ind = i * j;
       ind += ((ly - y) < (this->icot[j - 1]))
-                 ? ((this->dem.height - i) * j -
-                    this->tmp2[this->dem.height - i] - (this->dem.height - i))
+                 ? ((this->dem.height - i) * j - this->tmp2[this->dem.height - i] - (this->dem.height - i))
                  : this->tmp1[j - 1];
       ind += ((lx - x) < (itan[i - 1]))
-                 ? ((this->dem.width - j) * i -
-                    this->tmp1[this->dem.width - j] - (this->dem.width - j))
+                 ? ((this->dem.width - j) * i - this->tmp1[this->dem.width - j] - (this->dem.width - j))
                  : this->tmp2[i - 1];
       xx = j - 1;
       yy = i - 1;
       p = xx * this->dem.height + yy;
       np = (this->dem.width - 1 - yy) * this->dem.height + xx;
       if (this->quad == 0) {
-        this->dem.nodes[p].sight_ordered_index = ind - 1;
-        this->dem.nodes_sector_ordered[ind - 1] = np;
+        this->dem.sight_ordered[p] = ind - 1;
+        this->dem.sector_ordered[ind - 1] = np;
       } else {
-        this->dem.nodes[np].sight_ordered_index = ind - 1;
-        this->dem.nodes_sector_ordered[this->dem.size - ind] = p;
+        this->dem.sight_ordered[np] = ind - 1;
+        this->dem.sector_ordered[this->dem.size - ind] = p;
       }
     }
   }

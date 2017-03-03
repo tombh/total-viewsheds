@@ -8,24 +8,26 @@ namespace TVS {
 
 class DEM {
  public:
+  bool is_computing;
+  bool is_precomputing;
   int width;
   int height;
   int size;
+  int *sector_ordered;
+  int *sight_ordered;
+  float *elevations;
+  float *distances;
   int scale;
-  LinkedList::node *nodes;
-  int *nodes_sector_ordered;
-  float *cumulative_surface;
-
-  bool is_computing;
-  bool is_precomputing;
+  float *tvs_complete;
+  float scaled_observer_height;
+  int computable_points_count;
+  int tvs_width;
 
   DEM();
   ~DEM();
-  void setHeights();
-  void setNodeIDs();
+  void setElevations();
   void extractBTHeader(FILE*);
-  float maxViewshedValue();
-  float minViewshedValue();
+  bool isPointComputable(int);
   void prepareForCompute();
   void setToPrecompute();
   void setToCompute();

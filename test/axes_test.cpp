@@ -7,7 +7,9 @@
 #include "../src/definitions.h"
 
 SCENARIO("Rotated axes for sectors") {
+  setup();
   DEM dem = DEM();
+  dem.setToPrecompute();
 
   // Zero degrees still gets a 'shift angle' applied to
   // prevent point alignments.
