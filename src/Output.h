@@ -24,9 +24,6 @@ class Output {
   float readTVSFile();
   void tvsToPNG();
   std::string tvsToASCII();
-  std::string sectorOrderedDEMPointsToASCII(int*);
-  std::string sightOrderedDEMPointsToASCII(LinkedList::node*);
-  std::string nodeDistancesToASCII(LinkedList::node*);
   std::string viewshedToASCII(int);
 
  private:

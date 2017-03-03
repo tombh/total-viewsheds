@@ -1,32 +1,42 @@
 #include <sys/time.h>
+#include <math.h>
 
 #include <plog/Log.h>
 
-#include "definitions.h"
-#include "LinkedList.h"
 #include "DEM.h"
+#include "LinkedList.h"
+#include "definitions.h"
 
 namespace TVS {
 
 DEM::DEM()
     : is_computing(!FLAGS_is_precompute),
       is_precomputing(FLAGS_is_precompute),
-      size(FLAGS_dem_width * FLAGS_dem_height),
-      nodes(new LinkedList::node[size]),
-      nodes_sector_ordered(new int[size]),
-      cumulative_surface(new float[size]),
       width(FLAGS_dem_width),
       height(FLAGS_dem_height),
-      scale(FLAGS_dem_scale) {
-}
+      size(FLAGS_dem_width * FLAGS_dem_height),
+      sector_ordered(new int[size]),
+      sight_ordered(new int[size]),
+      elevations(new float[size]),
+      distances(new float[size]),
+      scale(FLAGS_dem_scale),
+      // Scaling all measurements to a single unit of the DEM_SCALE makes
+      // calculations simpler.
+      // TODO: I think this could be a problem when considering DEM's without
+      // curved earth projections?
+      scaled_observer_height(FLAGS_observer_height / scale) {}
 
 DEM::~DEM() {
-  delete[] this->nodes;
-  delete[] this->nodes_sector_ordered;
-  delete[] this->cumulative_surface;
+  delete[] this->sector_ordered;
+  delete[] this->sight_ordered;
+  delete[] this->distances;
+  if (this->is_computing) {
+    delete[] this->elevations;
+    delete[] this->tvs_complete;
+  }
 }
 
-void DEM::setHeights() {
+void DEM::setElevations() {
   FILE *f;
   unsigned short num;
   f = fopen(INPUT_DEM_FILE.c_str(), "rb");
@@ -42,23 +52,14 @@ void DEM::setHeights() {
       for (int y = 0; y < this->height; y++) {
         col_step = ((y + 1) * this->width);
         point = row_step - col_step;
-        this->nodes[point].idx = point;
 
         fread(&num, 2, 1, f);
 
-        // Why divide by SCALE?
-        // Surely this will effect spherical earth based calculations?
-        this->nodes[point].h = (float)num / this->scale;  // decameters
+        this->elevations[point] = (float)num;
       }
     }
   }
   fclose(f);
-}
-
-void DEM::setNodeIDs() {
-  for (int point = 0; point < this->size; point++) {
-    this->nodes[point].idx = point;
-  }
 }
 
 // Rather than getting into the whole gdal lib (which is amazing
@@ -67,42 +68,70 @@ void DEM::setNodeIDs() {
 void DEM::extractBTHeader(FILE *input_file) {
   FILE *output_file;
   unsigned char header[256];
+  fread(&header, 256, 1, input_file);
+
+  int cols = this->tvs_width;
+  int rows = this->tvs_width;
   short tvs_point_size = 4;
   short is_floating_point = 1;
 
-  fread(&header, 256, 1, input_file);
+  double left_extent;
+  memcpy(&left_extent, (header + 28), sizeof(double));
+  left_extent += (double)FLAGS_max_line_of_sight;
+
+  double right_extent;
+  memcpy(&right_extent, (header + 36), sizeof(double));
+  right_extent -= (double)FLAGS_max_line_of_sight;
+
+  double bottom_extent;
+  memcpy(&bottom_extent, (header + 44), sizeof(double));
+  bottom_extent += (double)FLAGS_max_line_of_sight;
+
+  double top_extent;
+  memcpy(&top_extent, (header + 52), sizeof(double));
+  top_extent -= (double)FLAGS_max_line_of_sight;
+
   output_file = fopen(TVS_RESULTS_FILE.c_str(), "wb");
   fwrite(&header, 256, 1, output_file);
 
-  // Update header for floating point TVS values
+  // Update header
+  fseek(output_file, 10, SEEK_SET);
+  fwrite(&cols, 4, 1, output_file);
+  fseek(output_file, 14, SEEK_SET);
+  fwrite(&rows, 4, 1, output_file);
   fseek(output_file, 18, SEEK_SET);
   fwrite(&tvs_point_size, 2, 1, output_file);
   fseek(output_file, 20, SEEK_SET);
   fwrite(&is_floating_point, 2, 1, output_file);
 
+  fseek(output_file, 28, SEEK_SET);
+  fwrite(&left_extent, 8, 1, output_file);
+  fseek(output_file, 36, SEEK_SET);
+  fwrite(&right_extent, 8, 1, output_file);
+  fseek(output_file, 44, SEEK_SET);
+  fwrite(&bottom_extent, 8, 1, output_file);
+  fseek(output_file, 52, SEEK_SET);
+  fwrite(&top_extent, 8, 1, output_file);
+
   fclose(output_file);
 }
 
-// TODO: Combine with min
-float DEM::maxViewshedValue() {
-  float current_max = 0;
-  for (int point = 0; point < this->size; point++) {
-    if (this->cumulative_surface[point] > current_max) {
-      current_max = this->cumulative_surface[point];
-    }
+// Depending on the requested max line of sight, only certain points in the
+// middle of the DEM can truly have their total visible surfaces calculated.
+// This is because points on the edge do not have access to elevation data
+// that may or not be visible.
+bool DEM::isPointComputable(int dem_id) {
+  int x = (dem_id % this->width) * FLAGS_dem_scale;
+  int y = (dem_id / this->height) * FLAGS_dem_scale;
+  int lower_x = FLAGS_max_line_of_sight;
+  int upper_x = ((this->width - 1) * FLAGS_dem_scale) - FLAGS_max_line_of_sight;
+  int lower_y = FLAGS_max_line_of_sight;
+  int upper_y = ((this->height  - 1) * FLAGS_dem_scale) - FLAGS_max_line_of_sight;
+  if (x >= lower_x && x <= upper_x && y >= lower_y && y <= upper_y) {
+    return true;
+  } else {
+    return false;
   }
-  return current_max;
-}
-
-// TODO: combine with max
-float DEM::minViewshedValue() {
-  float current_min = this->cumulative_surface[0];
-  for (int point = 1; point < this->size; point++) {
-    if (this->cumulative_surface[point] < current_min) {
-      current_min = this->cumulative_surface[point];
-    }
-  }
-  return current_min;
 }
 
 void DEM::setToPrecompute() {
@@ -116,9 +145,14 @@ void DEM::setToCompute() {
 }
 
 void DEM::prepareForCompute() {
+  this->computable_points_count = 0;
   for (int point = 0; point < this->size; point++) {
-    this->cumulative_surface[point] = 0;
+    if (this->isPointComputable(point)) {
+      this->computable_points_count++;
+    }
   }
+  this->tvs_width = sqrt(this->computable_points_count);
+  this->tvs_complete = new float[this->computable_points_count];
 }
 
 }  // namespace TVS

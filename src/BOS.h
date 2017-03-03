@@ -11,31 +11,43 @@ class BOS {
  public:
   DEM &dem;
 
-  int current_point;
-  int *positions;
-  int pov;
   int band_size;
   int half_band_size;
-  bool remove;
+  int computable_band_size;
+  int pov;
+  int *bands;
+  int current_band;
   int sector_angle;
   LinkedList bos;
-  LinkedList::node newnode;
   FILE *precomputed_data_file;
 
   BOS(DEM&);
+  ~BOS();
   void setup(int);
   void adjustToNextPoint(int);
-  void addNewNode();
-  void setPointOfView();
-  int calculateNewPosition();
-  int getNewPosition();
-  void insertNode();
   static void preComputedDataPath(char *, int);
-  void openPreComputedDataFile();
+  void buildBands(int);
+  void sweepForward();
+  void sweepBackward();
   void writeAndClose();
 
  private:
+  int *positions;
+  int new_point;
+  bool remove;
+  int sector_ordered_id;
+  int dem_id;
+
   int ensureBandSizeIsOdd(int);
+  void openPreComputedDataFile();
+  void initBandStorage();
+  void deleteBandStorage();
+  void addNewNode();
+  int calculateNewPosition();
+  int getNewPosition();
+  void insertPoint();
+  void prefillBands();
+
 };
 }
 

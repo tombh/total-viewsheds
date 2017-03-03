@@ -31,7 +31,7 @@ int LinkedList::Next(int j) { return LL[j].next; }
 
 int LinkedList::Prev(int j) { return LL[j].prev; }
 
-void LinkedList::Add(node node, int pos, bool remove) {
+void LinkedList::Add(int node, int pos, bool remove) {
   int tn = -3, tp = -3;
   bool replace = false;
   if (remove) {
@@ -40,7 +40,7 @@ void LinkedList::Add(node node, int pos, bool remove) {
     replace = (this->Tail == pos) || (this->LL[this->Tail].prev == pos);
   }
 
-  this->LL[this->Head].Value = node;  // by value
+  this->LL[this->Head].dem_id = node;  // by value
 
   if (!remove) {
     simpleinsert(pos);
@@ -57,18 +57,18 @@ void LinkedList::Add(node node, int pos, bool remove) {
   }
 }
 
-void LinkedList::FirstNode(node node) {
-  this->LL[this->Head].Value = node;
+void LinkedList::FirstNode(int node) {
+  this->LL[this->Head].dem_id = node;
   move_queue(true, false);
 }
 
-void LinkedList::AddFirst(node node, bool remove) {
+void LinkedList::AddFirst(int node, bool remove) {
   int tp = this->LL[this->Tail].prev;
   int tn = this->LL[this->Tail].next;
   bool removing_first = (tp == -2) && remove;
   if (removing_first) tp = this->Head;
 
-  this->LL[this->Head].Value = node;
+  this->LL[this->Head].dem_id = node;
   this->LL[this->Head].prev = -2;
   if (!removing_first) {
     this->LL[this->Head].next = this->First;
@@ -79,13 +79,13 @@ void LinkedList::AddFirst(node node, bool remove) {
   move_queue(true, remove);
 }
 
-void LinkedList::AddLast(node node, bool remove) {
+void LinkedList::AddLast(int node, bool remove) {
   int tp = this->LL[this->Tail].prev;
   int tn = this->LL[this->Tail].next;
   bool removing_last = (tn == -1) && remove;
   if (removing_last) tn = this->Head;
 
-  this->LL[this->Head].Value = node;
+  this->LL[this->Head].dem_id = node;
   this->LL[this->Head].next = -1;
   if (!removing_last) {
     this->LL[this->Head].prev = this->Last;

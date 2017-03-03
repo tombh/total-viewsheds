@@ -4,6 +4,8 @@
 #include "../src/Sector.h"
 #include "../src/DEM.h"
 
+#include "fixtures.h"
+
 /*
  * About the ASCII format used here:
  *   1. Columns are:
@@ -113,7 +115,7 @@ TEST_CASE("Bands of sight") {
     DEM dem = DEM();
     Sector sector = Sector(dem);
 
-    SECTION("Looping through all points doesn't produce and error") {
+    SECTION("Looping through all points doesn't produce an error") {
       computeBOSFor(&sector, 90, 35, "sector-indexed");
       std::string expected =
         "0 0  5  0.00000  -2 -1 FLT\n"
@@ -122,4 +124,27 @@ TEST_CASE("Bands of sight") {
       REQUIRE(bos == expected);
     }
   }
+
+  SECTION("Building bands") {
+    createMockDEM(fixtures::doublePeakDEM);
+
+    SECTION("sizes are correct") {
+      Compute compute = computeFullBOSForSector(0);
+      REQUIRE(compute.dem.computable_points_count == 9);
+      REQUIRE(compute.sector.bos_manager.computable_band_size == 4);
+    }
+
+    SECTION("for Sector 0") {
+      Compute compute = computeFullBOSForSector(0);
+      // Begining of first front band
+      REQUIRE(compute.sector.bos_manager.bands[0] == 20);
+      // Begining of first back band
+      REQUIRE(compute.sector.bos_manager.bands[3] == 20);
+      // Final point of final front band
+      REQUIRE(compute.sector.bos_manager.bands[20] == 27);
+      // Final point of final back band
+      REQUIRE(compute.sector.bos_manager.bands[23] == 3);
+    }
+  }
+
 }

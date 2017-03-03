@@ -27,6 +27,7 @@ std::string sightOrderedDEMPointsToASCII(DEM*);
 std::string nodeDistancesToASCII(DEM*);
 std::string bosToASCII(Sector*);
 std::string sweepToASCII(Sector*, std::string);
+Compute computeFullBOSForSector(int);
 void computeSweepFor(Compute*, std::string, int, int);
 
 #endif

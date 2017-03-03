@@ -17,11 +17,23 @@ namespace TVS {
 
 BOS::BOS(DEM &dem)
     : dem(dem),
-      // Size of the Band of Sight
+      // Size of the Band of Sight.
       band_size(ensureBandSizeIsOdd(FLAGS_dem_width)),
+      // The half band helps decide which points to add next.
+      half_band_size((band_size - 1) / 2),
+      // Limit and standardise final viewshed computations. The limit
+      // is used to restrict the area search for the viewshed. Whereas
+      // having a consistent size of band is usefel for vectorised
+      // parallel computation.
+      computable_band_size((FLAGS_max_line_of_sight / FLAGS_dem_scale) + 1),
+      // The actual Band of Sight data structure.
       bos(LinkedList(band_size)) {}
 
-// Currently, the adjustments to new BoS nodes requires the Bos itself to have
+BOS::~BOS() {
+  if (this->dem.is_computing) this->deleteBandStorage();
+}
+
+// Currently, adjusting to new BoS points requires the Bos itself to have
 // an odd size. Roughly speaking, think of it like this:
 //
 //   BoS = half_band_size + PoV + half_band_size
@@ -63,68 +75,68 @@ void BOS::preComputedDataPath(char *path_ptr, int sector_angle) {
 void BOS::setup(int sector_angle) {
   this->positions = new int[this->dem.size];
   this->sector_angle = sector_angle;
-  this->half_band_size = (this->band_size - 1) / 2;
-  this->current_point = 0;
+  this->sector_ordered_id = 0;
   this->openPreComputedDataFile();
   if(this->dem.is_computing) {
+    this->current_band = -1;
+    this->initBandStorage();
     fread(this->positions, 4, this->dem.size, this->precomputed_data_file);
   }
   this->pov = 0;
   this->bos.Clear();
-  int first_ordered_node = this->dem.nodes_sector_ordered[0];
-  this->bos.FirstNode(this->dem.nodes[first_ordered_node]);
+  this->bos.FirstNode(this->dem.sector_ordered[0]);
+}
+
+void BOS::initBandStorage() {
+  this->bands = new int[this->dem.computable_points_count * this->computable_band_size * 2];
+}
+
+void BOS::deleteBandStorage() {
+  delete[] this->bands;
 }
 
 void BOS::writeAndClose() {
-  if (this->dem.is_precomputing && this->current_point == this->dem.size - 1) {
+  if (this->dem.is_precomputing && this->sector_ordered_id == this->dem.size - 1) {
     fwrite(this->positions, 4, this->dem.size, this->precomputed_data_file);
   }
   fclose(this->precomputed_data_file);
   delete[] this->positions;
 }
 
-// Set the index of the currently analysed point to be relative to the band
-// of site size.
-void BOS::setPointOfView() {
-  this->pov = this->current_point % this->band_size;
-}
 
 // TODO: support even band sizes.
 // Anchoring to the PoV requires managing the edges of the BoS by carefully
 // using the half_band_size. This has the disadvantage of only supporting
 // odd band sizes.
-void BOS::adjustToNextPoint(int current_point) {
-  this->current_point = current_point;
-  this->setPointOfView();
+void BOS::adjustToNextPoint(int sector_ordered_id) {
+  this->sector_ordered_id = sector_ordered_id;
+  this->pov = this->sector_ordered_id % this->band_size;
 
   // Is the band of sight starting to be populated?
-  bool starting = this->current_point < this->half_band_size;
+  bool starting = this->sector_ordered_id < this->half_band_size;
 
   // Is the band of sight coming to an ending, therefore emptying?
   int end_section = this->dem.size - this->half_band_size - 1;
-  bool ending = this->current_point >= end_section;
+  bool ending = this->sector_ordered_id >= end_section;
 
-  int node_id, leading_node;
-  int doubled = 2 * this->current_point;
+  int leading;
+  int doubled = 2 * this->sector_ordered_id;
 
   if (starting) {
     this->remove = false;
 
-    node_id = this->dem.nodes_sector_ordered[doubled + 1];
-    this->newnode = this->dem.nodes[node_id];
-    this->insertNode();
+    this->new_point = this->dem.sector_ordered[doubled + 1];
+    this->insertPoint();
 
-    node_id = this->dem.nodes_sector_ordered[doubled + 2];
-    this->newnode = this->dem.nodes[node_id];
-    this->insertNode();
+    this->new_point = this->dem.sector_ordered[doubled + 2];
+    this->insertPoint();
   }
 
   if (!starting && !ending) {
     this->remove = true;
-    leading_node = this->current_point + this->half_band_size + 1;
-    node_id = this->dem.nodes_sector_ordered[leading_node];
-    this->newnode = this->dem.nodes[node_id];
-    this->insertNode();
+    leading = this->sector_ordered_id + this->half_band_size + 1;
+    this->new_point = this->dem.sector_ordered[leading];
+    this->insertPoint();
   }
 
   if (ending) {
@@ -138,10 +150,9 @@ int BOS::calculateNewPosition() {
   int position;
   int sweep;
   int sanity = 0;
-  int current_sight_index = this->newnode.sight_ordered_index;
-  int first_sight_index =
-      this->bos.LL[this->bos.First].Value.sight_ordered_index;
-  int last_sight_index = this->bos.LL[this->bos.Last].Value.sight_ordered_index;
+  int current_sight_index = this->dem.sight_ordered[this->new_point];
+  int first_sight_index = this->dem.sight_ordered[this->bos.LL[this->bos.First].dem_id];
+  int last_sight_index = this->dem.sight_ordered[this->bos.LL[this->bos.Last].dem_id];
 
   if (current_sight_index < first_sight_index) {
     position = -2;
@@ -149,12 +160,10 @@ int BOS::calculateNewPosition() {
     position = -1;
   } else {
     sweep = this->bos.LL[this->bos.First].next;
-    while (current_sight_index >=
-           this->bos.LL[sweep].Value.sight_ordered_index) {
+    while (current_sight_index >= this->dem.sight_ordered[this->bos.LL[sweep].dem_id]) {
       sweep = this->bos.LL[sweep].next;
-      sanity++;
       if (sanity > this->dem.size) {
-        LOGE << "newnode.sight_ordered_index: " << newnode.sight_ordered_index
+        LOGE << "new_point sight_ordered index: " << new_point
              << " is bigger than anything in band of sight.";
         throw;
       }
@@ -167,26 +176,62 @@ int BOS::calculateNewPosition() {
 int BOS::getNewPosition() {
   int position;
   if (this->dem.is_computing) {
-    position = this->positions[this->newnode.idx];
+    position = this->positions[this->new_point];
   }
   if (this->dem.is_precomputing) {
     position = this->calculateNewPosition();
-    this->positions[this->newnode.idx] = position;
+    this->positions[this->new_point] = position;
   }
   return position;
 }
 
-void BOS::insertNode() {
+void BOS::insertPoint() {
   int position = this->getNewPosition();
   if (position > -1) {
-    this->bos.Add(this->newnode, position, this->remove);
+    this->bos.Add(this->new_point, position, this->remove);
   } else {
     if (position == -1) {
-      this->bos.AddLast(this->newnode, this->remove);
+      this->bos.AddLast(this->new_point, this->remove);
     }
     if (position == -2) {
-      this->bos.AddFirst(this->newnode, this->remove);
+      this->bos.AddFirst(this->new_point, this->remove);
     }
+  }
+}
+
+void BOS::buildBands(int dem_id) {
+  this->dem_id = dem_id;
+  if (this->dem.isPointComputable(dem_id)) {
+    this->sweepForward();
+    this->sweepBackward();
+  }
+}
+
+void BOS::sweepForward() {
+  this->current_band++;
+  int section = this->current_band * this->computable_band_size;
+  this->bands[section] = this->bos.LL[this->pov].dem_id;
+
+  int count = 1;
+  int sweep = this->bos.LL[this->pov].next;
+  while (count < this->computable_band_size) {
+    this->bands[section + count] = this->bos.LL[sweep].dem_id;
+    sweep = this->bos.LL[sweep].next;
+    count++;
+  }
+}
+
+void BOS::sweepBackward() {
+  this->current_band++;
+  int section = this->current_band * this->computable_band_size;
+  this->bands[section] = this->bos.LL[this->pov].dem_id;
+
+  int count = 1;
+  int sweep = this->bos.LL[this->pov].prev;
+  while (count < this->computable_band_size) {
+    this->bands[section + count] = this->bos.LL[sweep].dem_id;
+    sweep = this->bos.LL[sweep].prev;
+    count++;
   }
 }
 

@@ -12,20 +12,24 @@ class DEM {
   int height;
   int size;
   int scale;
-  LinkedList::node *nodes;
-  int *nodes_sector_ordered;
-  float *cumulative_surface;
+  float scaled_observer_height;
+  int computable_points_count;
+  int tvs_width;
+
+  int *sector_ordered;
+  int *sight_ordered;
+  float *distances;
+  float *elevations;
+  float *tvs_complete;
 
   bool is_computing;
   bool is_precomputing;
 
   DEM();
   ~DEM();
-  void setHeights();
-  void setNodeIDs();
+  void setElevations();
   void extractBTHeader(FILE*);
-  float maxViewshedValue();
-  float minViewshedValue();
+  bool isPointComputable(int);
   void prepareForCompute();
   void setToPrecompute();
   void setToCompute();
