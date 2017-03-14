@@ -1,3 +1,4 @@
+#include <thread>
 #include <stdio.h>
 
 #include "BOS.h"
@@ -20,6 +21,8 @@ class Viewsheds {
   int tvs_size;
   int ring_data_size;
   int reserved_rings;
+  int computed_sectors;
+  std::thread *ring_writer_threads;
 
   Clamp cl;
   ClDev *gpu;
@@ -38,7 +41,7 @@ class Viewsheds {
   void transferDEMData();
   void transferSectorData(BOS&);
   void transferToHost();
-  void writeRingData(int*);
+  void writeRingData(int*, int);
 };
 
 }

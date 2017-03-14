@@ -1,3 +1,5 @@
+#include <thread>
+
 #include <plog/Log.h>
 
 #include "Clamp.h"
@@ -10,6 +12,8 @@ namespace TVS {
 Viewsheds::Viewsheds(DEM &dem)
   : dem(dem),
     reserved_rings(20),
+    computed_sectors(0),
+    ring_writer_threads(new std::thread[FLAGS_total_sectors]),
     cl(Clamp()),
     gpu(cl.createDev(FLAGS_cl_device)) {}
 
@@ -52,8 +56,8 @@ void Viewsheds::calculate(int sector_angle) {
 
   int *ring_data = new int[this->ring_data_size];
   this->gpu->read(this->sector_rings, ring_data);
-  this->writeRingData(ring_data);
-  delete[] ring_data;
+  this->ring_writer_threads[this->computed_sectors] = std::thread([=] { writeRingData(ring_data, sector_angle); });
+  this->computed_sectors++;
 }
 
 void Viewsheds::transferSectorData(BOS &bos) {
@@ -70,22 +74,27 @@ void Viewsheds::transferToHost() {
     this->dem.tvs_complete[i] += fb_surfaces[i + this->dem.computable_points_count];
   }
 
+  for (int i = 0; i < this->computed_sectors; i++) {
+    this->ring_writer_threads[i].join();
+  }
+
   delete[] fb_surfaces;
+  delete[] this->ring_writer_threads;
 }
 
 // TODO: Write in threads
-void Viewsheds::writeRingData(int *ring_data){
+void Viewsheds::writeRingData(int *ring_data, int _sector_angle){
   char path[100];
   int band_ring_size;
   int data[this->ring_data_size];
 
   LOGI << "Writing Ring Sector data ...";
 
-  this->ringDataPath(path, this->sector_angle);
+  this->ringDataPath(path, _sector_angle);
   FILE *file = fopen(path, "wb");
   if (file == NULL) {
     LOG_ERROR << "Couldn't open " << path
-              << " for sector_angle: " << this->sector_angle;
+              << " for sector_angle: " << _sector_angle;
     throw std::runtime_error("Couldn't open file.");
   }
 
@@ -99,6 +108,7 @@ void Viewsheds::writeRingData(int *ring_data){
     fwrite(data, 4, band_ring_size, file);
   }
   fclose(file);
+  delete[] ring_data;
 }
 
 }  // namespace TVS

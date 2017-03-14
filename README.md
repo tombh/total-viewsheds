@@ -18,5 +18,5 @@ It can be automated with [`clang-format`](https://clang.llvm.org/docs/ClangForma
 Intel(R) HD Graphics Cherryview (OpenCL)    
 portishead-benchmark.bt 168x168   
 precompute: 2.45s   
-compute (including ring writing): ~12s   
+compute (including precompute & ring writing): ~6.5s   
 
