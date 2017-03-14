@@ -13,6 +13,9 @@ void init(int argc, char *argv[]) {
   plog::init(plog::info, FLAGS_log_file.c_str());
   gflags::ParseCommandLineFlags(&argc, &argv, false); // false prevents stripping of args
   buildPathStrings();
+  if (FLAGS_max_line_of_sight == -1) {
+    FLAGS_max_line_of_sight = FLAGS_dem_width / 3;
+  }
 }
 
 void buildPathStrings() {

@@ -18,22 +18,27 @@ class Viewsheds {
   int computable_bands;
   int total_band_points;
   int tvs_size;
+  int ring_data_size;
+  int reserved_rings;
+
   Clamp cl;
   ClDev *gpu;
   ClProgram *program;
   ClKernel *kernel;
   ClMem *cumulative_surfaces;
+  ClMem *sector_rings;
   ClMem *distances;
   ClMem *elevations;
   ClMem *bands;
 
   Viewsheds(DEM&);
-  static void ringSectorDataPath(char *, int);
+  static void ringDataPath(char*, int);
   void calculate(int);
   void initialise();
   void transferDEMData();
   void transferSectorData(BOS&);
   void transferToHost();
+  void writeRingData(int*);
 };
 
 }

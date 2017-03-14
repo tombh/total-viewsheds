@@ -85,13 +85,14 @@ DEFINE_double(
 
 DEFINE_int32(
   max_line_of_sight,
-  1000,
+  -1,
   "The maximum distance in metres to search for visible points."
   "For a TVS calculation to be truly correct, it must have access"
   "to all the DEM data around it that may possibly be visible to it."
   "However, the further the distances searched the exponentially"
   "greater the computations required. Note that the largest"
-  "currently known line of sight int he world is 538km."
+  "currently known line of sight int he world is 538km. Defaults to"
+  "one third of the DEM width."
 );
 
 DEFINE_int32(
@@ -104,9 +105,9 @@ DEFINE_int32(
 );
 
 DEFINE_bool(
-  is_store_ring_sectors,
+  run_benchmarks,
   false,
-  "Should individual ring sector data be stored?"
+  "Run benchmarks"
 );
 
 DEFINE_double(

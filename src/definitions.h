@@ -15,7 +15,7 @@ DECLARE_string(log_file);
 DECLARE_string(input_dem_file);
 DECLARE_string(tvs_results_file);
 DECLARE_string(tvs_png_file);
-DECLARE_bool(is_store_ring_sectors);
+DECLARE_bool(run_benchmarks);
 DECLARE_int32(total_sectors);
 DECLARE_int32(dem_width);
 DECLARE_int32(dem_height);

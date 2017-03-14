@@ -35,6 +35,5 @@ class Output {
   void parseSectors();
   void parseSectorPoints();
   int readNextValue();
-  int getNumberOfRingSectors();
 };
 }

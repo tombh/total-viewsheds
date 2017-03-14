@@ -112,8 +112,7 @@ class Clamp {
   ClDev* createDev(int num);
   static void checkErr(cl_int err, const char* name);
 
-  ClProgram* compileProgram(const char* path);
-  ClProgram* compileProgramString(std::string prog);
+  ClProgram* compileProgram(const char* path, const char *extra_args);
 
   // Debug
   cl::Context* getContext() { return mCtx; }

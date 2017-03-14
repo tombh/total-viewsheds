@@ -59,7 +59,6 @@ void setFLAGDefaults() {
   FLAGS_dem_scale = 1;
   FLAGS_dem_width = 5;
   FLAGS_dem_height = 5;
-  FLAGS_is_store_ring_sectors = false;
 }
 
 void emptyDirectories() {

@@ -42,12 +42,10 @@ float Output::readTVSFile() {
 }
 
 // Converts final TVS to an ASCII grid.
-// Eg for a simple 5x5 DEM;
-// 0.215940  0.078242  0.098087  0.078242  0.089737
-// 0.086336  0.141383  0.129477  0.141383  0.086336
-// 0.105998  0.124606  0.161911  0.124606  0.105998
-// 0.092023  0.119315  0.138933  0.119315  0.092023
-// 0.096730  0.071249  0.084306  0.071249  0.096730
+// Eg; for a simple 9x9 DEM:
+// 0.215940  0.078242  0.098087
+// 0.086336  0.141383  0.129477
+// 0.105998  0.124606  0.161911
 std::string Output::tvsToASCII() {
   std::string out;
   for (int point = 0; point < this->dem.computable_points_count; point++) {
@@ -59,16 +57,21 @@ std::string Output::tvsToASCII() {
 }
 
 std::string Output::viewshedToASCII(int viewer) {
-  std::string viewshed_as_text;
+  std::string viewshed_as_text = "";
   this->viewshed = new std::string[this->dem.size];
   this->viewer = viewer;
   this->fillViewshedWithDots();
   this->parseSectors();
 
   for (int position = 0; position < this->dem.size; position++) {
-    viewshed_as_text += this->viewshed[position];
-    if ((position % this->dem.width + 1) == this->dem.width)
+    if (position == viewer) {
+      viewshed_as_text += "o ";
+    } else {
+      viewshed_as_text += this->viewshed[position];
+    }
+    if ((position % this->dem.width + 1) == this->dem.width) {
       viewshed_as_text += "\n";
+    }
   }
 
   delete [] this->viewshed;
@@ -84,7 +87,7 @@ void Output::fillViewshedWithDots() {
 void Output::parseSectors() {
   char path_ptr[100];
   for (int sector_angle = 0; sector_angle < FLAGS_total_sectors; sector_angle++) {
-    Viewsheds::ringSectorDataPath(path_ptr, sector_angle);
+    Viewsheds::ringDataPath(path_ptr, sector_angle);
     this->sector_file = fopen(path_ptr, "rb");
     parseSectorPoints();
     fclose(this->sector_file);
@@ -100,37 +103,38 @@ int Output::readNextValue() {
   return value;
 }
 
-// Remember that every sector computes every DEM point, just at a different
-// angle.
-// But we're just interested in one point (ie one viewshed) from each sector.
 void Output::parseSectorPoints() {
-  int opening, closing;
-  int no_of_ring_sectors;
-  for (int point = 0; point < this->dem.size; point++) {
-    // Backward and Forward facing portions of the sector
-    for (int b_and_f = 0; b_and_f < 2; b_and_f++) {
-      no_of_ring_sectors = this->getNumberOfRingSectors();
-      for (int iRS = 0; iRS < no_of_ring_sectors; iRS++) {
+  int opening, closing, pov, no_of_ring_values;
+  for (int point = 0; point < this->dem.computable_points_count * 2; point++) {
+    no_of_ring_values = readNextValue() / 2;
+    // Assume that every DEM point has an opening at the PoV
+    pov = readNextValue();
+    for (int iRS = 0; iRS < no_of_ring_values; iRS++) {
+      if (iRS == 0) {
+        opening = pov;
+      } else {
         opening = readNextValue();
-        closing = readNextValue();
-        if (point == this->viewer && opening != closing) {
+      }
+      closing = readNextValue();
+      if (pov == this->viewer) {
+        if (this->viewshed[opening] == ". " ) {
           this->viewshed[opening] = "+ ";
+        } else {
+          this->viewshed[opening] = "± ";
+        }
+
+        if (this->viewshed[closing] == ". " ) {
           this->viewshed[closing] = "- ";
+        } else {
+          this->viewshed[closing] = "± ";
+        }
+
+        if (opening == closing) {
+          this->viewshed[opening] = "± ";
         }
       }
     }
   }
-}
-
-// For every ring sector there will be an opening and a closing point,
-// so the number of ring sectors will be half the number of items we
-// need to parse.
-int Output::getNumberOfRingSectors() {
-  int value;
-  int number_of_ring_sectors = 0;
-  value = readNextValue();
-  if (value != 0) number_of_ring_sectors = value / 2;
-  return number_of_ring_sectors;
 }
 
 }  // namespace TVS

@@ -75,8 +75,12 @@ ClDev* Clamp::createDev(int num) {
   return mCreatedDevices[num];
 }
 
-ClProgram* Clamp::compileProgram(const char* path) {
+ClProgram* Clamp::compileProgram(const char* path, const char* extra_args) {
   std::ifstream file(path);
+
+  std::string default_args = "-Werror -cl-fast-relaxed-math";
+  std::string all_args = default_args + " " + std::string(extra_args);
+  const char *args = all_args.c_str();
 
   if (!file.is_open()) {
     fprintf(stdout, "Could not read CL program %s\n", path);
@@ -88,30 +92,10 @@ ClProgram* Clamp::compileProgram(const char* path) {
   cl::Program::Sources source(1, std::make_pair(prog.c_str(), prog.length() + 1));
 
   cl::Program* program = new cl::Program(*mCtx, source);
-  cl_int err = program->build(mDeviceList, "-Werror -cl-fast-relaxed-math");
+  cl_int err = program->build(mDeviceList, args);
   file.close();
   if (err != CL_SUCCESS) {
     std::cout << "Error:\n" << program->getBuildInfo<CL_PROGRAM_BUILD_LOG>(mDeviceList[0]);
-    checkErr(err, "Program::build()");
-  } else {
-    ClProgram* prg = new ClProgram(program);
-    return prg;
-  }
-
-  return NULL;
-}
-
-ClProgram* Clamp::compileProgramString(std::string prog) {
-  cl::Program::Sources source(1, std::make_pair(prog.c_str(), prog.length() + 1));
-
-  cl::Program* program = new cl::Program(*mCtx, source);
-  cl_int err = program->build(mDeviceList, "-cl-fast-relaxed-math");
-
-  if (err != CL_SUCCESS) {
-    std::string bi;
-    program->getInfo(CL_PROGRAM_BUILD_LOG, &bi);
-    std::cout << "Error:\n" << bi;
-
     checkErr(err, "Program::build()");
   } else {
     ClProgram* prg = new ClProgram(program);
