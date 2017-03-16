@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
     TVS::TVS_RESULTS_FILE = TVS::OUTPUT_DIR + "/benchmark.bt";
     TVS::FLAGS_dem_width = 168;
     TVS::FLAGS_dem_height = 168;
-    TVS::FLAGS_max_line_of_sight = 168 / 3;
+    TVS::FLAGS_max_line_of_sight = (168 * 30) / 3;
     TVS::Compute compute = TVS::Compute();
     compute.forcePreCompute();
     compute.forceCompute();
@@ -39,7 +39,6 @@ int main(int argc, char *argv[]) {
   if(!TVS::FLAGS_is_precompute) {
     compute.output();
     printf("%s written\n", TVS::TVS_RESULTS_FILE.c_str());
-    printf("%s written\n", TVS::TVS_PNG_FILE.c_str());
   }
 
   exit(0);

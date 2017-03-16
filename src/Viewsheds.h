@@ -36,12 +36,13 @@ class Viewsheds {
 
   Viewsheds(DEM&);
   static void ringDataPath(char*, int);
+  static void threadedWrite(FILE*, int*, int, int);
   void calculate(int);
   void initialise();
   void transferDEMData();
   void transferSectorData(BOS&);
   void transferToHost();
-  void writeRingData(int*, int);
+  void writeRingData();
 };
 
 }

@@ -19,12 +19,7 @@ DEM::DEM()
       sight_ordered(new int[size]),
       elevations(new float[size]),
       distances(new float[size]),
-      scale(FLAGS_dem_scale),
-      // Scaling all measurements to a single unit of the DEM_SCALE makes
-      // calculations simpler.
-      // TODO: I think this could be a problem when considering DEM's without
-      // curved earth projections?
-      scaled_observer_height(FLAGS_observer_height / scale) {}
+      scale(FLAGS_dem_scale) {}
 
 DEM::~DEM() {
   delete[] this->sector_ordered;
@@ -65,6 +60,7 @@ void DEM::setElevations() {
 // Rather than getting into the whole gdal lib (which is amazing
 // but a little complex) let's just hack the existing header for
 // the TVS output.
+// TODO: DRYer
 void DEM::extractBTHeader(FILE *input_file) {
   FILE *output_file;
   unsigned char header[256];

@@ -19,7 +19,6 @@ class DEM {
   float *distances;
   int scale;
   float *tvs_complete;
-  float scaled_observer_height;
   int computable_points_count;
   int tvs_width;
 

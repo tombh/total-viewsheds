@@ -26,6 +26,7 @@ DEFINE_string(
   "General output path for precomputation caches and complete results"
 );
 
+// TODO: rename to something to do with band point position data
 DEFINE_string(
   sector_dir,
   "sectors",
@@ -59,12 +60,6 @@ DEFINE_string(
   "Total viewshed values for every point in DEM"
 );
 
-DEFINE_string(
-  tvs_png_file,
-  "tvs.png",
-  "For displaying a PNG version of the total viewshed"
-);
-
 DEFINE_int32(
   dem_width,
   5,
@@ -96,18 +91,22 @@ DEFINE_int32(
 );
 
 DEFINE_int32(
+  reserved_ring_space,
+  50,
+  "The maximum number of visible rings expected per band of sight."
+  "This is a critical value. If it is too low then memory corruption"
+  "occurs. Less critically, if it is too high then performance is"
+  "lost due to unused RAM. All I know so far is that 50 is enough"
+  "for a 15km line of sight..."
+);
+
+DEFINE_int32(
   total_sectors,
   180,
   "Think of a double-sided lighthouse moving this many times to make a"
   "full 360 degree sweep. The algorithm looks forward and backward in"
   "each sector so if moving 1 degree at a time then 180 sectors are"
   "needed"
-);
-
-DEFINE_bool(
-  run_benchmarks,
-  false,
-  "Run benchmarks"
 );
 
 DEFINE_double(
@@ -135,15 +134,15 @@ DEFINE_double(
 );
 
 DEFINE_int32(
-  size_of_tvs_png_palette,
-  1024,
-  "The quality of the gradient used to create the final TVS PNG image"
-);
-
-DEFINE_int32(
   cl_device,
   0,
   "The device to use for computations. Eg; see `clinfo` for available devices"
+);
+
+DEFINE_bool(
+  run_benchmarks,
+  false,
+  "Run benchmarks"
 );
 
 // The following are built up from multiple FLAGS_*

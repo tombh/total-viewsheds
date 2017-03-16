@@ -13,13 +13,17 @@ namespace TVS {
  * The conception of the BoS here is different to traditional 'V'-shaped
  * methods. Here we use a parallel band. This is fundamental to the
  * optimization improvements found in this whole approach.
+ *
+ * Note that band sizes stretch to the full extent of the DEM during
+ * precomputation and are subsequently rebuilt during computation
+ * to a length restricted to the specified line of sight (by default
+ * one third the width of the DEM).
 **/
-
 BOS::BOS(DEM &dem)
     : dem(dem),
-      // Size of the Band of Sight.
+      // Size of the Band of Sight during precomputation.
       band_size(ensureBandSizeIsOdd(FLAGS_dem_width)),
-      // The half band helps decide which points to add next.
+      // The half band helps decide which points to add next during sector sweep.
       half_band_size((band_size - 1) / 2),
       // Limit and standardise final viewshed computations. The limit
       // is used to restrict the area search for the viewshed. Whereas
@@ -55,6 +59,7 @@ int BOS::ensureBandSizeIsOdd(int requested_band_size) {
   return requested_band_size;
 }
 
+// TODO: rename to something about band data
 void BOS::openPreComputedDataFile() {
   const char *mode;
   char path[100];

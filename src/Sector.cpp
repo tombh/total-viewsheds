@@ -23,7 +23,6 @@ void Sector::prepareForCompute() {
 }
 
 void Sector::changeAngle(int sector_angle) {
-  //LOGI << "Changing sector angle to: " << sector_angle;
   this->sector_angle = sector_angle;
   Axes axes = Axes(this->dem);
   axes.adjust(sector_angle);

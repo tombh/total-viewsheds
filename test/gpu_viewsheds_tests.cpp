@@ -26,6 +26,6 @@ TEST_CASE("GPU viewsheds") {
 
   SECTION("Calculation") {
     Compute compute = computeTVS();
-    REQUIRE(compute.dem.tvs_complete[0] == Approx(0.08727));
+    REQUIRE(compute.dem.tvs_complete[0] == Approx(0.15708));
   }
 }

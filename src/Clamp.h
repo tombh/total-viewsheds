@@ -82,6 +82,7 @@ class ClDev {
   void read(ClMem* m);
   void write(ClMem* m, void* in);
   void write(ClMem* m);
+  void fillWithZeroes(ClMem* m);
 
   cl::Device* getDevice() { return mDev; }
   cl::CommandQueue* getQueue() { return mQueue; }

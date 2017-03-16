@@ -14,7 +14,7 @@ void init(int argc, char *argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, false); // false prevents stripping of args
   buildPathStrings();
   if (FLAGS_max_line_of_sight == -1) {
-    FLAGS_max_line_of_sight = FLAGS_dem_width / 3;
+    FLAGS_max_line_of_sight = (FLAGS_dem_width * FLAGS_dem_scale) / 3;
   }
 }
 
@@ -26,7 +26,6 @@ void buildPathStrings() {
   SECTOR_DIR = OUTPUT_DIR + "/" + FLAGS_sector_dir;
   RING_SECTOR_DIR = OUTPUT_DIR + "/" + FLAGS_ring_sector_dir;
   TVS_RESULTS_FILE = OUTPUT_DIR + "/" + FLAGS_tvs_results_file;
-  TVS_PNG_FILE = OUTPUT_DIR + "/" + FLAGS_tvs_png_file;
 }
 
 void createDirectory(std::string directory) {

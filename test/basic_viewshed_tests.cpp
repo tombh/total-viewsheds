@@ -44,27 +44,28 @@ TEST_CASE("Basic viewsheds") {
     SECTION("Viewer on mountain summit") {
       std::string expected_viewshed =
         ". . . . . . . . . \n"
-        ". - ± . ± . ± . . \n"
         ". ± ± ± ± ± ± ± . \n"
+        ". ± . ± . ± . ± . \n"
         ". ± ± . . . ± ± . \n"
-        ". ± ± . o . ± ± . \n"
-        ". ± ± . . . ± . . \n"
+        ". ± . . o . . ± . \n"
+        ". ± ± . . . ± ± . \n"
+        ". ± . ± . ± . ± . \n"
         ". ± ± ± ± ± ± ± . \n"
-        ". . ± ± ± ± ± - . \n"
         ". . . . . . . . . \n";
+
       std::string result = calculateViewshedFor(40);
       REQUIRE(result == expected_viewshed);
     }
 
     SECTION("Viewer in the top left of the TVS grid") {
       std::string expected_viewshed =
-        ". ± . . . ± . . . \n"
-        "± ± ± ± ± ± . . . \n"
-        ". ± . . . ± ± . . \n"
-        ". ± . o . ± ± . . \n"
-        ". ± . . . ± ± . . \n"
-        "± ± ± ± ± . ± . . \n"
-        ". . ± ± ± ± ± . . \n"
+        "± ± ± ± ± ± ± . . \n"
+        "± . . . . ± ± . . \n"
+        "± . . . . ± ± . . \n"
+        "± . . o . . ± . . \n"
+        "± . . . . ± ± . . \n"
+        "± ± ± . ± ± ± . . \n"
+        "± ± ± ± ± . . . . \n"
         ". . . . . . . . . \n"
         ". . . . . . . . . \n";
       std::string result = calculateViewshedFor(30);
@@ -76,12 +77,12 @@ TEST_CASE("Basic viewsheds") {
     createMockDEM(fixtures::doublePeakDEM);
     std::string expected_viewshed =
       "± ± ± ± ± ± ± . . \n"
-      "± . . . . ± ± . . \n"
-      "± . . . . ± ± . . \n"
-      "± . . o . ± . . . \n"
-      "± . . . . ± . . . \n"
+      "± . ± . ± ± ± . . \n"
+      "± ± . . . . ± . . \n"
+      "± . . o . . ± . . \n"
+      "± ± . . . ± ± . . \n"
+      "± ± . . ± ± ± . . \n"
       "± ± ± ± ± . ± . . \n"
-      "± ± ± . ± ± ± . . \n"
       ". . . . . . . . . \n"
       ". . . . . . . . . \n";
     std::string result = calculateViewshedFor(30);

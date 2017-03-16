@@ -12,18 +12,15 @@ std::string calculateTVS() {
   return output.tvsToASCII();
 }
 
-// TODO: the peaks in both mock DEMs are actually too abrupt and cause points
-// lower down to not be seen. That appears to be why the central surfaces here
-// are lower, even though the point has higher elevation.
 TEST_CASE("Total viewsheds") {
   setup();
 
   SECTION("for the mountain DEM TVS values should be greater in the middle") {
     createMockDEM(fixtures::mountainDEM);
     std::string expected_tvs =
-      "17.397566 27.558777 17.397566 \n"
-      "28.929914 12.961548 28.942245 \n"
-      "18.452042 30.313377 18.452042 \n\n";
+      "32.695278 21.426254 32.695290 \n"
+      "20.698776 40.228973 20.686457 \n"
+      "32.028805 19.958977 32.028824 \n\n";
     std::string result = calculateTVS();
     REQUIRE(result == expected_tvs);
   }
@@ -31,9 +28,9 @@ TEST_CASE("Total viewsheds") {
   SECTION("for the double-peaked DEM then values in the dip should be lowest") {
     createMockDEM(fixtures::doublePeakDEM);
     std::string expected_tvs =
-      "19.078993 23.416677 22.099308 \n"
-      "25.099541 7.442859 31.392956 \n"
-      "23.303123 30.952698 33.724258 \n\n";
+      "35.602600 31.393995 30.822342 \n"
+      "29.533701 37.877922 22.686573 \n"
+      "30.406879 21.737001 18.455341 \n\n";
     std::string result = calculateTVS();
     REQUIRE(result == expected_tvs);
   }

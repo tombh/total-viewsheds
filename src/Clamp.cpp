@@ -168,6 +168,11 @@ void ClDev::write(ClMem* m, void* in) {
   Clamp::checkErr(err, "ComamndQueue::enqueueWriteBuffer()");
 }
 
+void ClDev::fillWithZeroes(ClMem* m) {
+  cl_int err = mQueue->enqueueFillBuffer(*(m->mBuf), 0.0, 0, m->mSize);
+  Clamp::checkErr(err, "ComamndQueue::enqueueFillBuffer()");
+}
+
 void ClDev::write(ClMem* m) { write(m, m->mBogus); }
 
 void ClDev::freeMem(ClMem* m) {
