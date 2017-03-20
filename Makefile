@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 DOES_ICC_EXIST := $(shell icc --version 2>/dev/null)
 
 ifdef DOES_ICC_EXIST
@@ -9,9 +11,9 @@ else
   CXX = g++
 endif
 
-CFLAGS += -std=c++11 -O3 -g -lOpenCL
-LDFLAGS = -std=c++11 -L. -O3 -lOpenCL
-LINKER_FLAGS = include/gflags/libgflags.a -lpthread
+CFLAGS += -std=c++11 -O3 -g
+LDFLAGS += -std=c++11 -L. -O3
+LINKER_FLAGS += include/gflags/libgflags.a -lpthread -lOpenCL
 
 APPS = tvs tvs-test
 

@@ -1,5 +1,4 @@
 #include <sys/time.h>
-#include <arrayfire.h>
 
 #include <plog/Log.h>
 

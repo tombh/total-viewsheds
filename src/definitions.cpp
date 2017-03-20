@@ -131,6 +131,8 @@ DEFINE_double(
   " .  .  .  .  .\n"
   " .  .  .  .  .\n"
   " .  .  .  .  .\n"
+  "\n"
+  "NB. The same value MUST be applied to both compute and precompute."
 );
 
 DEFINE_int32(

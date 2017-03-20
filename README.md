@@ -14,6 +14,20 @@ This project is based on the work of S. Tabik, A. R. Cervilla, E. Zapata and L.F
 Styling follows [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
 It can be automated with [`clang-format`](https://clang.llvm.org/docs/ClangFormat.html) (included when installing clang). This repo contains a `.clang-format` file defining the rules for Google's style guide (generated with `clang-format -style=google -dump-config > .clang-format`).
 
+## Building
+OpenCL, there are many providers.
+Gflags requires `cmake`.
+
+Then just run;
+`make`
+
+For CUDA you may need something like;
+```
+CFLAGS=-I/usr/local/cuda-8.0/targets/x86_64-linux/include \
+LINKER_FLAGS=/usr/local/cuda-8.0/targets/x86_64-linux/lib/libOpenCL.so \
+make
+```
+
 ## Benchmark
 Intel(R) HD Graphics Cherryview (OpenCL)    
 portishead-benchmark.bt 168x168   
