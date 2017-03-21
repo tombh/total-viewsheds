@@ -24,6 +24,7 @@ void Viewsheds::ringDataPath(char *path_ptr, int sector_angle) {
 void Viewsheds::initialise() {
   std::stringstream extra;
   LOGI << "Using max line of sight of: " << FLAGS_max_line_of_sight;
+  this->total_band_points = this->computable_bands * this->computable_band_size;
   // Passing the band size as a compiler argument allows for optimisation through
   // loop unrolling.
   extra << "-D BAND_SIZE=" << this->computable_band_size;

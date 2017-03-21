@@ -49,7 +49,11 @@ void Compute::run() {
     LOG_INFO << "Starting precomputation.";
   }
 
-  this->iterateSectors();
+  if (FLAGS_single_sector != -1) {
+    this->singleSector(FLAGS_single_sector);
+  } else {
+    this->iterateSectors();
+  }
 
   if (this->dem.is_computing) {
     LOG_INFO << "Finished main computation.";
@@ -62,17 +66,21 @@ void Compute::iterateSectors() {
   // TODO: support non-integer angles and increments
   int increment = 180 / FLAGS_total_sectors;
   for (int angle = 0; angle < 180; angle += increment) {
-    LOGI << "Sector: " << angle;
-    this->sector.changeAngle(angle);
-    if (this->dem.is_precomputing) {
-      this->sector.sweepThroughAllBands();
-    }
-    if (this->dem.is_computing) {
-      this->sector.calculateViewsheds();
-    }
+    this->singleSector(angle);
   }
   if (this->dem.is_computing) {
     this->sector.viewsheds.transferToHost();
+  }
+}
+
+void Compute::singleSector(int angle) {
+  LOGI << "Sector: " << angle;
+  this->sector.changeAngle(angle);
+  if (this->dem.is_precomputing) {
+    this->sector.sweepThroughAllBands();
+  }
+  if (this->dem.is_computing) {
+    this->sector.calculateViewsheds();
   }
 }
 

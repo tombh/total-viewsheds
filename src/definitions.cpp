@@ -109,6 +109,16 @@ DEFINE_int32(
   "needed"
 );
 
+DEFINE_int32(
+  single_sector,
+  -1,
+  "Only precompute/compute a single sector angle.\n"
+  "Useful for running precomputations in parallel. You could also"
+  "potentially run computations in parallel as well, however, that"
+  "only makes sense if you have multiple GPU devices."
+);
+
+
 DEFINE_double(
   observer_height,
   1.5,

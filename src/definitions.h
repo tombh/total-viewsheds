@@ -16,6 +16,7 @@ DECLARE_string(input_dem_file);
 DECLARE_string(tvs_results_file);
 DECLARE_bool(run_benchmarks);
 DECLARE_int32(total_sectors);
+DECLARE_int32(single_sector);
 DECLARE_int32(dem_width);
 DECLARE_int32(dem_height);
 DECLARE_double(dem_scale);
