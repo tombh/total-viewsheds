@@ -36,8 +36,12 @@ namespace TVS {
  * distances inside the Band of Sight. In reality the 2 new axes do not
  * necessarily intersect in the middle of the DEM.
  *
- * NB: Only square DEMs are currently supported
+ * This code is surprisingly fast, even without GPU parallelisation. However,
+ * it seems a perfect candidate for parallelisation. Yet any performance
+ * improvement gains parallelisation might offer would be eclipsed by the band building
+ * step of precomputation, which is inherently linear.
  *
+ * NB: Only square DEMs are currently supported.
 **/
 
 Axes::Axes(DEM &dem)

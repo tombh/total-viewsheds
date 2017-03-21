@@ -39,8 +39,7 @@ void Viewsheds::initialise() {
   this->gpu->write(this->elevations, this->dem.elevations);
 }
 
-void Viewsheds::calculate(int sector_angle) {
-  this->sector_angle = sector_angle;
+void Viewsheds::calculate() {
   this->kernel->setDomain(this->computable_bands);
   this->kernel->setArg(0, this->elevations);
   this->kernel->setArg(1, this->distances);
@@ -58,9 +57,22 @@ void Viewsheds::calculate(int sector_angle) {
   this->writeRingData();
 }
 
-void Viewsheds::transferSectorData(BOS &bos) {
+void Viewsheds::transferSectorData() {
+  char path[100];
+  int *band_data = new int[this->total_band_points];
+
   this->gpu->write(this->distances, this->dem.distances);
-  this->gpu->write(this->bands, bos.bands);
+
+  BOS::preComputedDataPath(path, this->sector_angle);
+  FILE *file = fopen(path, "rb");
+  if (file == NULL) {
+    LOG_ERROR << "Couldn't open " << path << " for sector_angle: " << this->sector_angle;
+    throw std::runtime_error("Couldn't open file.");
+  }
+
+  fread(band_data, 4, this->total_band_points, file);
+  this->gpu->write(this->bands, band_data);
+  delete[] band_data;
 }
 
 void Viewsheds::transferToHost() {

@@ -31,6 +31,6 @@ make
 ## Benchmark
 Intel(R) HD Graphics Cherryview (OpenCL)    
 portishead-benchmark.bt 168x168   
-precompute: 2.45s   
-compute (including precompute & ring writing): ~6.5s   
+precompute: ~5.7s   
+compute (including ring writing): ~2.6s   
 

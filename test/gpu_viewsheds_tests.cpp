@@ -9,12 +9,11 @@ Compute computeTVS() {
   compute.forcePreCompute();
   compute.dem.setToCompute();
   compute.dem.prepareForCompute();
-  compute.dem.setElevations();
   compute.sector.prepareForCompute();
   compute.sector.changeAngle(0);
-  compute.sector.loopThroughBands();
-  compute.sector.viewsheds.transferSectorData(compute.sector.bos_manager);
-  compute.sector.viewsheds.calculate(0);
+  compute.sector.viewsheds.sector_angle = 0;
+  compute.sector.viewsheds.transferSectorData();
+  compute.sector.viewsheds.calculate();
   compute.sector.viewsheds.transferToHost();
   return compute;
 }

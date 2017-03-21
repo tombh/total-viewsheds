@@ -9,6 +9,7 @@ class LinkedList {
     short next;  // Identifier the next node in Linked List.
     short prev;  // Identifier the Previous node in Linked List.
   };
+  LinkedListNode *LL;  // array of node
 
   int Size;   // Size of list
   int First;  // First node list
@@ -17,8 +18,6 @@ class LinkedList {
   int Tail;   // Node Tail list
 
   int Count;  //=0;
-
-  LinkedListNode *LL;  // array of node
 
   LinkedList(int x);  // Create de Linked List with size x
   ~LinkedList();

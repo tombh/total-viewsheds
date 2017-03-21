@@ -147,7 +147,6 @@ TEST_CASE("Bands of sight") {
         " 77 68 59 50 50 41 32 23\n"
         " 68 59 50 41 41 32 23 14\n"
         " 59 50 41 32 32 23 14  5\n\n";
-
       REQUIRE(bands == expected);
     }
 

@@ -43,9 +43,9 @@ void Compute::run() {
   if (this->dem.is_computing) {
     LOG_INFO << "Starting main computation.";
     this->dem.prepareForCompute();
-    this->dem.setElevations();
     this->sector.prepareForCompute();
   } else {
+    this->sector.prepareForPreCompute();
     LOG_INFO << "Starting precomputation.";
   }
 
@@ -64,12 +64,13 @@ void Compute::iterateSectors() {
   for (int angle = 0; angle < 180; angle += increment) {
     LOGI << "Sector: " << angle;
     this->sector.changeAngle(angle);
-    this->sector.loopThroughBands();
+    if (this->dem.is_precomputing) {
+      this->sector.sweepThroughAllBands();
+    }
     if (this->dem.is_computing) {
       this->sector.calculateViewsheds();
     }
   }
-
   if (this->dem.is_computing) {
     this->sector.viewsheds.transferToHost();
   }

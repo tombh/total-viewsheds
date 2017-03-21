@@ -20,8 +20,9 @@ class Sector {
 
   Sector(DEM&);
   void changeAngle(int);
-  void loopThroughBands();
+  void sweepThroughAllBands();
   void prepareForCompute();
+  void prepareForPreCompute();
   void calculateViewsheds();
 };
 

@@ -121,6 +121,7 @@ void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
   Axes axes = Axes(sector->dem);
   axes.adjust(angle);
   sector->dem.setToPrecompute();
+  sector->prepareForPreCompute();
   sector->sector_angle = angle;
   sector->bos_manager.setup(angle);
   if (ordering == "dem-indexed") bosLoopToDEMPoint(sector, point);
@@ -131,12 +132,10 @@ void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
 
 Compute reconstructBandsForSector(int angle) {
   Compute compute = Compute();
-  compute.forcePreCompute();
-  compute.dem.setToCompute();
-  compute.dem.prepareForCompute();
-  compute.sector.prepareForCompute();
+  compute.dem.setToPrecompute();
+  compute.sector.prepareForPreCompute();
   compute.sector.changeAngle(angle);
-  compute.sector.loopThroughBands();
+  compute.sector.sweepThroughAllBands();
   return compute;
 }
 

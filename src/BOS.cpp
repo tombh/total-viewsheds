@@ -14,14 +14,42 @@ namespace TVS {
  * methods. Here we use a parallel band. This is fundamental to the
  * optimization improvements found in this whole approach.
  *
- * Note that band sizes stretch to the full extent of the DEM during
- * precomputation and are subsequently rebuilt during computation
- * to a length restricted to the specified line of sight (by default
- * one third the width of the DEM).
+ * Note that not all band data is saved for later computation. Only bands that
+ * are able to see both forward and backward to the extent of the maximum line of
+ * sight flag are saved for later. However, *all* possible bands need to be
+ * computed in order to find those bands.
+ *
+ * A useful image to remember when working with this code is that the BoS doesn't
+ * rotate like a light house, but rather sweeps, assimilating one new point at a
+ * time. This is in fact fundamental to the efficiency improvements of this algorithm.
+ * A naive solution would rotate about every point and then move onto the next point.
+ * Whereas here, we generate an entirely new BoS simply by adding just one new point
+ * per iteration. Then, once the entire DEM has been swept, we rotate, repeating the
+ * same process for a new angle.
+ *
+ * Consider the following DEM, where '/' represents the sides of a single BoS:
+ *
+ *  Start        Front
+ *    <  .  .  .  +  /  .  .  .
+ *    .  .  .  /  +  .  .  .  .
+ *    .  .  -  +  /  .  .  .  .
+ *    .  .  /  +  .  .  .  .  .
+ *    .  . (+) /  .  .  .  .  .
+ *    .  /  +  .  .  .  .  .  .
+ *    .  +  /  .  .  .  .  .  .
+ *    / [+] @  .  .  .  .  .  .
+ *    +  /  .  .  .  .  .  .  >
+ *   Back                    End
+ *
+ * Even though '+' points are part of the BoS, they are not necessarily points
+ * on a perfectly straight line, yet they do have increasing orthogonal distances
+ * from the "Front" and "Back". Point '[+]' was just added and '@' will be the
+ * next point added -- but in order to do so, a point will need to be removed,
+ * just as '-' was during the previous BoS and '(+)' in the next. "Start" and
+ * "End" represent the sector ordering, they are where the BoS begins and finishes.
 **/
 BOS::BOS(DEM &dem)
     : dem(dem),
-      // Size of the Band of Sight during precomputation.
       band_size(ensureBandSizeIsOdd(FLAGS_dem_width)),
       // The half band helps decide which points to add next during sector sweep.
       half_band_size((band_size - 1) / 2),
@@ -34,13 +62,14 @@ BOS::BOS(DEM &dem)
       bos(LinkedList(band_size)) {}
 
 BOS::~BOS() {
-  if (this->dem.is_computing) {
+  if (this->dem.is_precomputing) {
     delete[] this->bands;
   }
 }
 
 void BOS::initBandStorage() {
-  this->bands = new int[this->dem.computable_points_count * this->computable_band_size * 2];
+  this->total_band_points = this->dem.computable_points_count * this->computable_band_size * 2;
+  this->bands = new int[this->total_band_points];
 }
 
 // Currently, adjusting to new BoS points requires the Bos itself to have
@@ -61,15 +90,9 @@ int BOS::ensureBandSizeIsOdd(int requested_band_size) {
 
 // TODO: rename to something about band data
 void BOS::openPreComputedDataFile() {
-  const char *mode;
   char path[100];
   this->preComputedDataPath(path, this->sector_angle);
-  if (this->dem.is_precomputing) {
-    mode = "wb";
-  } else {
-    mode = "rb";
-  }
-  this->precomputed_data_file = fopen(path, mode);
+  this->precomputed_data_file = fopen(path, "wb");
   if (this->precomputed_data_file == NULL) {
     LOG_ERROR << "Couldn't open " << path
               << " for sector_angle: " << this->sector_angle;
@@ -84,27 +107,22 @@ void BOS::preComputedDataPath(char *path_ptr, int sector_angle) {
 // Set the band of sight up for the very first time, namely after a sector angle
 // change.
 void BOS::setup(int sector_angle) {
-  this->positions = new int[this->dem.size];
   this->sector_angle = sector_angle;
   this->sector_ordered_id = 0;
   this->openPreComputedDataFile();
-  if(this->dem.is_computing) {
-    this->current_band = -1;
-    fread(this->positions, 4, this->dem.size, this->precomputed_data_file);
-  }
+  this->current_band = -2;
   this->pov = 0;
   this->bos.Clear();
   this->bos.FirstNode(this->dem.sector_ordered[0]);
 }
 
 void BOS::writeAndClose() {
-  if (this->dem.is_precomputing && this->sector_ordered_id == this->dem.size - 1) {
-    fwrite(this->positions, 4, this->dem.size, this->precomputed_data_file);
+  // This condition serves test cases where only partial band data is compiled.
+  if (this->sector_ordered_id == this->dem.size - 1) {
+    fwrite(this->bands, 4, this->total_band_points, this->precomputed_data_file);
   }
   fclose(this->precomputed_data_file);
-  delete[] this->positions;
 }
-
 
 // TODO: support even band sizes.
 // Anchoring to the PoV requires managing the edges of the BoS by carefully
@@ -147,7 +165,7 @@ void BOS::adjustToNextPoint(int sector_ordered_id) {
   }
 }
 
-// Where does the new node fit in the current BoS?
+// Where does the new point fit in the current BoS?
 int BOS::calculateNewPosition() {
   int position;
   int sweep;
@@ -175,20 +193,10 @@ int BOS::calculateNewPosition() {
   return position;
 }
 
-int BOS::getNewPosition() {
-  int position;
-  if (this->dem.is_computing) {
-    position = this->positions[this->new_point];
-  }
-  if (this->dem.is_precomputing) {
-    position = this->calculateNewPosition();
-    this->positions[this->new_point] = position;
-  }
-  return position;
-}
-
+// Insert a DEM point into the BoS linked list.
+// TODO: Refactor into the LinkedList class.
 void BOS::insertPoint() {
-  int position = this->getNewPosition();
+  int position = this->calculateNewPosition();
   if (position > -1) {
     this->bos.Add(this->new_point, position, this->remove);
   } else {
@@ -201,38 +209,26 @@ void BOS::insertPoint() {
   }
 }
 
-void BOS::buildBands(int dem_id) {
-  this->dem_id = dem_id;
-  if (this->dem.isPointComputable(dem_id)) {
-    this->sweepForward();
-    this->sweepBackward();
-  }
-}
-
-void BOS::sweepForward() {
-  this->current_band++;
-  int section = this->current_band * this->computable_band_size;
-  this->bands[section] = this->bos.LL[this->pov].dem_id;
-
-  int count = 1;
-  int sweep = this->bos.LL[this->pov].next;
-  while (count < this->computable_band_size) {
-    this->bands[section + count] = this->bos.LL[sweep].dem_id;
-    sweep = this->bos.LL[sweep].next;
-    count++;
-  }
-}
-
-void BOS::sweepBackward() {
-  this->current_band++;
-  int section = this->current_band * this->computable_band_size;
-  this->bands[section] = this->bos.LL[this->pov].dem_id;
+// Sweep through the current BoS linked list to create a normal array.
+// These arrays are saved to file and later sent to the GPU for parallel
+// compuation.
+// TODO: The while() loop here and in calculateNewPosition() have similarities,
+// is there a performance gain to be found by somehow combining these 2?
+void BOS::buildComputableBands() {
+  this->current_band += 2;
+  int section_front = this->current_band * this->computable_band_size;
+  int section_back = (this->current_band + 1) * this->computable_band_size;
+  this->bands[section_front] = this->bos.LL[this->pov].dem_id;
+  this->bands[section_back] = this->bos.LL[this->pov].dem_id;
 
   int count = 1;
-  int sweep = this->bos.LL[this->pov].prev;
+  int sweep_front = this->bos.LL[this->pov].next;
+  int sweep_back = this->bos.LL[this->pov].prev;
   while (count < this->computable_band_size) {
-    this->bands[section + count] = this->bos.LL[sweep].dem_id;
-    sweep = this->bos.LL[sweep].prev;
+    this->bands[section_front + count] = this->bos.LL[sweep_front].dem_id;
+    this->bands[section_back + count] = this->bos.LL[sweep_back].dem_id;
+    sweep_front = this->bos.LL[sweep_front].next;
+    sweep_back = this->bos.LL[sweep_back].prev;
     count++;
   }
 }

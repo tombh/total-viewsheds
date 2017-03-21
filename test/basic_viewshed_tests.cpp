@@ -52,7 +52,6 @@ TEST_CASE("Basic viewsheds") {
         ". ± . ± . ± . ± . \n"
         ". ± ± ± ± ± ± ± . \n"
         ". . . . . . . . . \n";
-
       std::string result = calculateViewshedFor(40);
       REQUIRE(result == expected_viewshed);
     }

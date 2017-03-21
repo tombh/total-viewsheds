@@ -17,9 +17,16 @@ DEM::DEM()
       size(FLAGS_dem_width * FLAGS_dem_height),
       sector_ordered(new int[size]),
       sight_ordered(new int[size]),
-      elevations(new float[size]),
       distances(new float[size]),
-      scale(FLAGS_dem_scale) {}
+      scale(FLAGS_dem_scale) {
+  this->computable_points_count = 0;
+  for (int point = 0; point < this->size; point++) {
+    if (this->isPointComputable(point)) {
+      this->computable_points_count++;
+    }
+  }
+  this->tvs_width = sqrt(this->computable_points_count);
+}
 
 DEM::~DEM() {
   delete[] this->sector_ordered;
@@ -31,9 +38,16 @@ DEM::~DEM() {
   }
 }
 
+void DEM::prepareForCompute() {
+  this->elevations = new float[this->size];
+  this->tvs_complete = new float[this->computable_points_count];
+  this->setElevations();
+}
+
 void DEM::setElevations() {
   FILE *f;
   unsigned short num;
+
   f = fopen(INPUT_DEM_FILE.c_str(), "rb");
   if (f == NULL) {
     LOG_ERROR << "Error opening: " << INPUT_DEM_FILE;
@@ -47,9 +61,7 @@ void DEM::setElevations() {
       for (int y = 0; y < this->height; y++) {
         col_step = ((y + 1) * this->width);
         point = row_step - col_step;
-
         fread(&num, 2, 1, f);
-
         this->elevations[point] = (float)num;
       }
     }
@@ -136,19 +148,9 @@ void DEM::setToPrecompute() {
 }
 
 void DEM::setToCompute() {
+  this->prepareForCompute();
   this->is_precomputing = false;
   this->is_computing = true;
-}
-
-void DEM::prepareForCompute() {
-  this->computable_points_count = 0;
-  for (int point = 0; point < this->size; point++) {
-    if (this->isPointComputable(point)) {
-      this->computable_points_count++;
-    }
-  }
-  this->tvs_width = sqrt(this->computable_points_count);
-  this->tvs_complete = new float[this->computable_points_count];
 }
 
 }  // namespace TVS

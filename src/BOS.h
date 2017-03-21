@@ -14,6 +14,7 @@ class BOS {
   int band_size;
   int half_band_size;
   int computable_band_size;
+  int total_band_points;
   int pov;
   int *bands;
   int current_band;
@@ -27,13 +28,10 @@ class BOS {
   void setup(int);
   void adjustToNextPoint(int);
   static void preComputedDataPath(char *, int);
-  void buildBands(int);
-  void sweepForward();
-  void sweepBackward();
+  void buildComputableBands();
   void writeAndClose();
 
  private:
-  int *positions;
   int new_point;
   bool remove;
   int sector_ordered_id;
@@ -45,8 +43,6 @@ class BOS {
   int calculateNewPosition();
   int getNewPosition();
   void insertPoint();
-  void prefillBands();
-
 };
 }
 
