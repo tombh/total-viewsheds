@@ -18,6 +18,7 @@ class DEM {
   float *elevations;
   float *distances;
   int scale;
+  int max_los_as_points;
   float *tvs_complete;
   int computable_points_count;
   int tvs_width;
@@ -26,6 +27,7 @@ class DEM {
   ~DEM();
   void setElevations();
   void extractBTHeader(FILE*);
+  int povIdToTVSId(int);
   bool isPointComputable(int);
   void prepareForCompute();
   void setToPrecompute();

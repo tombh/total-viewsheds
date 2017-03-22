@@ -17,7 +17,6 @@ class BOS {
   int total_band_points;
   int pov;
   int *bands;
-  int current_band;
   int sector_angle;
   LinkedList bos;
   FILE *precomputed_data_file;

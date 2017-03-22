@@ -151,16 +151,16 @@ std::string bandStructureToASCII(int points, int band_size, std::string *bands) 
   std::stringstream out;
   out << "\n";
   for (int point = 0; point < points; point++) {
-    int marker = point * 2 * band_size;
-
-    int front_start = marker + band_size - 1;
-    int front_end = marker;
+    int front_marker = point * band_size;
+    int front_start = front_marker + band_size - 1;
+    int front_end = front_marker;
     for (int iband = front_start; iband >= front_end; iband--) {
       out << bands[iband];
     }
 
-    int back_start = marker + band_size;
-    int back_end = marker + (2 * band_size);
+    int back_marker = (point + points) * band_size;
+    int back_start = back_marker;
+    int back_end = back_marker + band_size;
     for (int iband = back_start; iband < back_end; iband++) {
       out << bands[iband];
     }

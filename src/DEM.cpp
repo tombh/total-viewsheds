@@ -18,7 +18,8 @@ DEM::DEM()
       sector_ordered(new int[size]),
       sight_ordered(new int[size]),
       distances(new float[size]),
-      scale(FLAGS_dem_scale) {
+      scale(FLAGS_dem_scale),
+      max_los_as_points(FLAGS_max_line_of_sight / scale) {
   this->computable_points_count = 0;
   for (int point = 0; point < this->size; point++) {
     if (this->isPointComputable(point)) {
@@ -122,6 +123,13 @@ void DEM::extractBTHeader(FILE *input_file) {
   fwrite(&top_extent, 8, 1, output_file);
 
   fclose(output_file);
+}
+
+int DEM::povIdToTVSId(int pov_id) {
+  int shifted_id =
+    (((pov_id / this->width) - this->max_los_as_points) * this->tvs_width)
+    + ((pov_id % this->width) - this->max_los_as_points);
+  return shifted_id;
 }
 
 // Depending on the requested max line of sight, only certain points in the

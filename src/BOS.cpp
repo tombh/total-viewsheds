@@ -110,7 +110,6 @@ void BOS::setup(int sector_angle) {
   this->sector_angle = sector_angle;
   this->sector_ordered_id = 0;
   this->openPreComputedDataFile();
-  this->current_band = -2;
   this->pov = 0;
   this->bos.Clear();
   this->bos.FirstNode(this->dem.sector_ordered[0]);
@@ -215,11 +214,12 @@ void BOS::insertPoint() {
 // TODO: The while() loop here and in calculateNewPosition() have similarities,
 // is there a performance gain to be found by somehow combining these 2?
 void BOS::buildComputableBands() {
-  this->current_band += 2;
-  int section_front = this->current_band * this->computable_band_size;
-  int section_back = (this->current_band + 1) * this->computable_band_size;
-  this->bands[section_front] = this->bos.LL[this->pov].dem_id;
-  this->bands[section_back] = this->bos.LL[this->pov].dem_id;
+  int pov_id = this->bos.LL[this->pov].dem_id;
+  int tvs_id = this->dem.povIdToTVSId(pov_id);
+  int section_front = tvs_id * this->computable_band_size;
+  int section_back = (tvs_id + this->dem.computable_points_count) * this->computable_band_size;
+  this->bands[section_front] = pov_id;
+  this->bands[section_back] = pov_id;
 
   int count = 1;
   int sweep_front = this->bos.LL[this->pov].next;

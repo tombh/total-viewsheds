@@ -96,17 +96,5 @@ kernel void viewshed(
   // Make a note of how many rings we found
   sector_rings[sector_rings_start] = ring_id;
 
-  // Shift DEM-based coordinates into TVS coordinates. Recall that TVS values can only be calculated
-  // for values away from the edge of the DEM -- thus why the TVS grid is smaller.
-  // TODO: Imply the TVS grid ordering in the ordering of the bands sent here. This can be done once
-  // during precompute.
-  shifted_id =
-    (((pov_id / dem_width) - max_los_as_points) * tvs_width)
-    + ((pov_id % dem_width) - max_los_as_points);
-  // Group all back bands at the end.
-  if (idx % 2) {
-    shifted_id = shifted_id + computable_points_count;
-  }
-
-  cumulative_surfaces[shifted_id] = cumulative_surfaces[shifted_id] + band_surface;
+  cumulative_surfaces[idx] = cumulative_surfaces[idx] + band_surface;
 }
