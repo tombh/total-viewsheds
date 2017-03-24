@@ -28,8 +28,11 @@
 // 000001111111111111111110000000000000
 
 std::string calculateViewshedFor(int viewer) {
+  {
+    Compute compute = Compute();
+    compute.forcePreCompute();
+  }
   Compute compute = Compute();
-  compute.forcePreCompute();
   compute.forceCompute();
   Output output = Output(compute.dem);
   return output.viewshedToASCII(viewer);

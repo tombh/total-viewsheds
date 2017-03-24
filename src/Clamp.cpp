@@ -1,3 +1,5 @@
+// Originally from https://github.com/snakehand/clamp
+
 #include <CL/cl.hpp>
 #include <utility>
 #include <stdio.h>
@@ -48,7 +50,7 @@ Clamp::~Clamp() {
       delete mCreatedDevices[i];
       mCreatedDevices[i] = NULL;
     }
-    delete mCreatedDevices;
+    delete[] mCreatedDevices;
     mCreatedDevices = NULL;
   }
   delete mCtx;
@@ -183,6 +185,7 @@ void ClDev::freeMem(ClMem* m) {
       mMemory.erase(it);
       return;
     }
+    it++;
   }
 
   std::cerr << "ClDev::freeMem() " << (void*)m << " not found." << std::endl;

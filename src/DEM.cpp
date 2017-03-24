@@ -126,11 +126,17 @@ void DEM::extractBTHeader(FILE *input_file) {
 }
 
 int DEM::povIdToTVSId(int pov_id) {
-  int shifted_id =
+  return
     (((pov_id / this->width) - this->max_los_as_points) * this->tvs_width)
     + ((pov_id % this->width) - this->max_los_as_points);
-  return shifted_id;
 }
+
+int DEM::tvsIdToPOVId(int tvs_id) {
+  return
+    (((tvs_id / this->tvs_width) + this->max_los_as_points) * this->width)
+    + ((tvs_id % this->tvs_width) + this->max_los_as_points);
+}
+
 
 // Depending on the requested max line of sight, only certain points in the
 // middle of the DEM can truly have their total visible surfaces calculated.

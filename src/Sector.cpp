@@ -12,13 +12,14 @@
 
 namespace TVS {
 
-Sector::Sector(DEM &dem) : dem(dem), bos_manager(BOS(dem)), viewsheds(Viewsheds(dem)) {}
+Sector::Sector(DEM &dem) : dem(dem), bos_manager(BOS(dem)), viewsheds(Viewsheds(dem, bos_manager)) {}
 
 void Sector::prepareForPreCompute() {
   this->bos_manager.initBandStorage();
 }
 
 void Sector::prepareForCompute() {
+  this->bos_manager.initBandStorage();
   this->viewsheds.computable_band_size = this->bos_manager.computable_band_size;
   this->viewsheds.computable_bands = this->dem.computable_points_count * 2;
   this->viewsheds.initialise();

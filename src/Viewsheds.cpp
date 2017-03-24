@@ -9,8 +9,9 @@
 
 namespace TVS {
 
-Viewsheds::Viewsheds(DEM &dem)
+Viewsheds::Viewsheds(DEM &dem, BOS &bos_manager)
     : dem(dem),
+      bos_manager(bos_manager),
       reserved_rings(FLAGS_reserved_ring_space * 2),
       computed_sectors(0),
       ring_writer_threads(new std::thread[FLAGS_total_sectors]),
@@ -27,7 +28,13 @@ void Viewsheds::initialise() {
   this->total_band_points = this->computable_bands * this->computable_band_size;
   // Passing the band size as a compiler argument allows for optimisation through
   // loop unrolling.
-  extra << "-D BAND_SIZE=" << this->computable_band_size;
+  extra << " -D BAND_SIZE=" << this->computable_band_size;
+  extra << " -D TOTAL_BANDS=" << this->computable_bands;
+  extra << " -D TVS_WIDTH=" << this->dem.tvs_width;
+  extra << " -D DEM_WIDTH=" << this->dem.width;
+  extra << " -D MAX_LOS_AS_POINTS=" << this->dem.max_los_as_points;
+  extra << " -D OBSERVER_HEIGHT=" << FLAGS_observer_height;
+  extra << " -D RESERVED_RINGS=" << this->reserved_rings;
   this->program = this->cl.compileProgram("src/viewshed.cl", extra.str().c_str());
   this->kernel = this->program->getKernel("viewshed");
   this->ring_data_size = this->computable_bands * this->reserved_rings;
@@ -36,7 +43,7 @@ void Viewsheds::initialise() {
   this->sector_rings = this->gpu->allocMem(sizeof(int), this->ring_data_size);
   this->distances = this->gpu->allocMem(sizeof(float), this->dem.size);
   this->elevations = this->gpu->allocMem(sizeof(float), this->dem.size);
-  this->bands = this->gpu->allocMem(sizeof(int), this->total_band_points);
+  this->band_markers = this->gpu->allocMem(sizeof(int), this->computable_bands);
   this->gpu->write(this->elevations, this->dem.elevations);
 }
 
@@ -45,35 +52,25 @@ void Viewsheds::calculate() {
   this->kernel->setArg(0, this->elevations);
   this->kernel->setArg(1, this->distances);
   this->kernel->setArg(2, this->bands);
-  this->kernel->setArg(3, FLAGS_max_line_of_sight / this->dem.scale);
-  this->kernel->setArg(4, float(FLAGS_observer_height));
-  this->kernel->setArg(5, this->dem.width);
-  this->kernel->setArg(6, this->dem.tvs_width);
-  this->kernel->setArg(7, this->dem.computable_points_count);
-  this->kernel->setArg(8, this->reserved_rings);
-  this->kernel->setArg(9, this->cumulative_surfaces);
-  this->kernel->setArg(10, this->sector_rings);
+  this->kernel->setArg(3, this->band_markers);
+  this->kernel->setArg(4, this->cumulative_surfaces);
+  this->kernel->setArg(5, this->sector_rings);
   this->gpu->queue(this->kernel);
   this->gpu->wait();
   this->writeRingData();
+  // Free the GPU band memory because its size is different for every sector
+  this->gpu->freeMem(this->bands);
 }
 
 void Viewsheds::transferSectorData() {
-  char path[100];
-  int *band_data = new int[this->total_band_points];
-
+  // Distance data
   this->gpu->write(this->distances, this->dem.distances);
-
-  BOS::preComputedDataPath(path, this->sector_angle);
-  FILE *file = fopen(path, "rb");
-  if (file == NULL) {
-    LOG_ERROR << "Couldn't open " << path << " for sector_angle: " << this->sector_angle;
-    throw std::runtime_error("Couldn't open file.");
-  }
-
-  fread(band_data, 4, this->total_band_points, file);
-  this->gpu->write(this->bands, band_data);
-  delete[] band_data;
+  // Band data
+  this->bos_manager.adjustToAngle(this->sector_angle);
+  this->bos_manager.loadBandData();
+  this->gpu->write(this->band_markers, this->bos_manager.band_markers);
+  this->bands = this->gpu->allocMem(sizeof(short), this->bos_manager.band_data_size);
+  this->gpu->write(this->bands, this->bos_manager.band_data);
 }
 
 void Viewsheds::transferToHost() {

@@ -28,6 +28,7 @@ class DEM {
   void setElevations();
   void extractBTHeader(FILE*);
   int povIdToTVSId(int);
+  int tvsIdToPOVId(int);
   bool isPointComputable(int);
   void prepareForCompute();
   void setToPrecompute();

@@ -5,15 +5,16 @@
 #include "fixtures.h"
 
 Compute computeTVS() {
+  {
+    Compute compute = Compute();
+    compute.forcePreCompute();
+  }
   Compute compute = Compute();
-  compute.forcePreCompute();
   compute.dem.setToCompute();
   compute.dem.prepareForCompute();
   compute.sector.prepareForCompute();
   compute.sector.changeAngle(0);
-  compute.sector.viewsheds.sector_angle = 0;
-  compute.sector.viewsheds.transferSectorData();
-  compute.sector.viewsheds.calculate();
+  compute.sector.calculateViewsheds();
   compute.sector.viewsheds.transferToHost();
   return compute;
 }

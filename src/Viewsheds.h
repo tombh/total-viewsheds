@@ -13,12 +13,13 @@ namespace TVS {
 class Viewsheds {
  public:
   DEM &dem;
+  BOS &bos_manager;
 
   int sector_angle;
   int computable_band_size;
   int computable_bands;
   int total_band_points;
-  int tvs_size;
+  int band_data_size;
   int ring_data_size;
   int reserved_rings;
   int computed_sectors;
@@ -33,8 +34,9 @@ class Viewsheds {
   ClMem *distances;
   ClMem *elevations;
   ClMem *bands;
+  ClMem *band_markers;
 
-  Viewsheds(DEM&);
+  Viewsheds(DEM&, BOS&);
   static void ringDataPath(char*, int);
   static void threadedWrite(FILE*, int*, int, int);
   void calculate();

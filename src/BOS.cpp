@@ -47,6 +47,11 @@ namespace TVS {
  * next point added -- but in order to do so, a point will need to be removed,
  * just as '-' was during the previous BoS and '(+)' in the next. "Start" and
  * "End" represent the sector ordering, they are where the BoS begins and finishes.
+ *
+ * Conveniently the final computable band arrays are highly compressable. After all
+ * they are straight(ish) lines over a grid, so the numeric differences between each DEM
+ * ID tend to have many repetitions. This is exploited, giving benefits of reduced
+ * precomputation data footprint and faster bandwidth transfer to the GPU.
 **/
 BOS::BOS(DEM &dem)
     : dem(dem),
@@ -55,21 +60,18 @@ BOS::BOS(DEM &dem)
       half_band_size((band_size - 1) / 2),
       // Limit and standardise final viewshed computations. The limit
       // is used to restrict the area search for the viewshed. Whereas
-      // having a consistent size of band is usefel for vectorised
+      // having a consistent size of band is useful for vectorised
       // parallel computation.
       computable_band_size((FLAGS_max_line_of_sight / FLAGS_dem_scale) + 1),
+      sector_angle(-1),
       // The actual Band of Sight data structure.
       bos(LinkedList(band_size)) {}
 
 BOS::~BOS() {
-  if (this->dem.is_precomputing) {
-    delete[] this->bands;
+  delete[] this->band_markers;
+  if (this->dem.is_computing) {
+    delete[] this->band_data;
   }
-}
-
-void BOS::initBandStorage() {
-  this->total_band_points = this->dem.computable_points_count * this->computable_band_size * 2;
-  this->bands = new int[this->total_band_points];
 }
 
 // Currently, adjusting to new BoS points requires the Bos itself to have
@@ -82,8 +84,7 @@ void BOS::initBandStorage() {
 int BOS::ensureBandSizeIsOdd(int requested_band_size) {
   if (requested_band_size % 2 == 0) {
     requested_band_size++;
-    LOGI << "Raising `band_size` from " << requested_band_size - 1 << " to "
-         << requested_band_size;
+    LOGI << "Raising `band_size` from " << requested_band_size - 1 << " to " << requested_band_size;
   }
   return requested_band_size;
 }
@@ -91,11 +92,16 @@ int BOS::ensureBandSizeIsOdd(int requested_band_size) {
 // TODO: rename to something about band data
 void BOS::openPreComputedDataFile() {
   char path[100];
+  const char *mode;
   this->preComputedDataPath(path, this->sector_angle);
-  this->precomputed_data_file = fopen(path, "wb");
+  if (this->dem.is_precomputing) {
+    mode = "wb";
+  } else {
+    mode = "rb";
+  }
+  this->precomputed_data_file = fopen(path, mode);
   if (this->precomputed_data_file == NULL) {
-    LOG_ERROR << "Couldn't open " << path
-              << " for sector_angle: " << this->sector_angle;
+    LOG_ERROR << "Couldn't open " << path << " for sector_angle: " << this->sector_angle;
     throw "Couldn't open file.";
   }
 }
@@ -106,21 +112,25 @@ void BOS::preComputedDataPath(char *path_ptr, int sector_angle) {
 
 // Set the band of sight up for the very first time, namely after a sector angle
 // change.
-void BOS::setup(int sector_angle) {
-  this->sector_angle = sector_angle;
+void BOS::setup(int angle) {
+  this->adjustToAngle(angle);
   this->sector_ordered_id = 0;
-  this->openPreComputedDataFile();
   this->pov = 0;
   this->bos.Clear();
   this->bos.FirstNode(this->dem.sector_ordered[0]);
 }
 
-void BOS::writeAndClose() {
-  // This condition serves test cases where only partial band data is compiled.
-  if (this->sector_ordered_id == this->dem.size - 1) {
-    fwrite(this->bands, 4, this->total_band_points, this->precomputed_data_file);
+void BOS::adjustToAngle(int angle) {
+  if (this->dem.is_computing && this->sector_angle != -1) {
+    delete[] this->band_data;
   }
-  fclose(this->precomputed_data_file);
+  this->sector_angle = angle;
+  this->openPreComputedDataFile();
+  if (this->dem.is_precomputing) {
+    // Skip to after the band markers
+    fseek(this->precomputed_data_file, (this->dem.computable_points_count * 2 * 4) + 4, SEEK_SET);
+  }
+  this->band_data_size = 0;
 }
 
 // TODO: support even band sizes.
@@ -182,8 +192,7 @@ int BOS::calculateNewPosition() {
     while (current_sight_index >= this->dem.sight_ordered[this->bos.LL[sweep].dem_id]) {
       sweep = this->bos.LL[sweep].next;
       if (sanity > this->dem.size) {
-        LOGE << "new_point sight_ordered index: " << new_point
-             << " is bigger than anything in band of sight.";
+        LOGE << "new_point sight_ordered index: " << new_point << " is bigger than anything in band of sight.";
         throw;
       }
     }
@@ -208,29 +217,101 @@ void BOS::insertPoint() {
   }
 }
 
-// Sweep through the current BoS linked list to create a normal array.
-// These arrays are saved to file and later sent to the GPU for parallel
+// The band data file consists of:
+// * 1 x TVS-sized integer array for front band markers.
+// * 1 x TVS-sized integer array for back band markers.
+// * A single integer representing the size of the compressed data that follows.
+// * Arbitary length array of short integers. Individual bands can be found from
+//   the markers at the head of the file. Arrays are in pairs of 'count:delta',
+//   where 'count' is the number of occurences of the 'delta', which is the
+//   difference between the previous band DEM ID and the current.
+void BOS::initBandStorage() {
+  this->band_markers = new int[this->dem.computable_points_count * 2];
+}
+
+// Sweep through the current BoS linked list to create a normal array, from
+// which we can compress the deltas using RLE, ie. '22233444' to '3:2,2:3,3:4'.
+// These compressed arrays are saved to file and later sent to the GPU for parallel
 // compuation.
 // TODO: The while() loop here and in calculateNewPosition() have similarities,
-// is there a performance gain to be found by somehow combining these 2?
+// is there a performance gain to be found by somehow combining them?
 void BOS::buildComputableBands() {
   int pov_id = this->bos.LL[this->pov].dem_id;
   int tvs_id = this->dem.povIdToTVSId(pov_id);
-  int section_front = tvs_id * this->computable_band_size;
-  int section_back = (tvs_id + this->dem.computable_points_count) * this->computable_band_size;
-  this->bands[section_front] = pov_id;
-  this->bands[section_back] = pov_id;
+  CompressedBand front_band = CompressedBand();
+  CompressedBand back_band = CompressedBand();
+  front_band.delta_count = 0;
+  back_band.delta_count = 0;
+  front_band.pointer = 0;
+  back_band.pointer = 0;
+  front_band.data = new short[this->computable_band_size * 2];
+  back_band.data = new short[this->computable_band_size * 2];
 
   int count = 1;
   int sweep_front = this->bos.LL[this->pov].next;
   int sweep_back = this->bos.LL[this->pov].prev;
+  front_band.current_delta = this->bos.LL[sweep_front].dem_id - pov_id;
+  back_band.current_delta = this->bos.LL[sweep_back].dem_id - pov_id;
+  front_band.previous_id = pov_id;
+  back_band.previous_id = pov_id;
   while (count < this->computable_band_size) {
-    this->bands[section_front + count] = this->bos.LL[sweep_front].dem_id;
-    this->bands[section_back + count] = this->bos.LL[sweep_back].dem_id;
+    this->compressBand(front_band, this->bos.LL[sweep_front].dem_id);
+    this->compressBand(back_band, this->bos.LL[sweep_back].dem_id);
     sweep_front = this->bos.LL[sweep_front].next;
     sweep_back = this->bos.LL[sweep_back].prev;
     count++;
   }
+
+  // Close the compressed band by forcing a delta change, thus ensuring that the
+  // current delta gets written as the final RLE pattern. `pov_id` forces a delta
+  // change because it is impossible that the difference between the last ID and the
+  // penultimate ID is the same as the difference between the last ID and the first
+  // (ie PoV) ID.
+  this->compressBand(front_band, pov_id);
+  this->compressBand(back_band, pov_id);
+
+  // Front band starts here
+  this->band_markers[tvs_id] = this->band_data_size;
+  // The current back band starts here
+  this->band_data_size += front_band.pointer;
+  this->band_markers[tvs_id + this->dem.computable_points_count] = this->band_data_size;
+  // The next front band will start here
+  this->band_data_size += back_band.pointer;
+
+  fwrite(front_band.data, 2, front_band.pointer, this->precomputed_data_file);
+  fwrite(back_band.data, 2, back_band.pointer, this->precomputed_data_file);
+  delete[] front_band.data;
+  delete[] back_band.data;
+}
+
+// Search for runs of identical deltas, the so-called Run Length Encoding.
+void BOS::compressBand(CompressedBand &band, int dem_id) {
+  band.previous_delta = band.current_delta;
+  band.current_delta = dem_id - band.previous_id;
+  band.previous_id = dem_id;
+  if (band.previous_delta != band.current_delta) {
+    band.data[band.pointer] = band.delta_count;
+    band.data[band.pointer + 1] = band.previous_delta;
+    band.pointer += 2;
+    band.delta_count = 0;
+  }
+  band.delta_count++;
+}
+
+void BOS::writeAndClose() {
+  fseek(this->precomputed_data_file, this->dem.computable_points_count * 2 * 4, SEEK_SET);
+  fwrite(&this->band_data_size, 4, 1, this->precomputed_data_file);
+  fseek(this->precomputed_data_file, 0, SEEK_SET);
+  fwrite(this->band_markers, 4, this->dem.computable_points_count * 2, this->precomputed_data_file);
+  fclose(this->precomputed_data_file);
+}
+
+void BOS::loadBandData() {
+  fread(this->band_markers, 4, this->dem.computable_points_count * 2, this->precomputed_data_file);
+  fread(&this->band_data_size, 4, 1, this->precomputed_data_file);
+  this->band_data = new short[this->band_data_size];
+  fread(this->band_data, 2, this->band_data_size, this->precomputed_data_file);
+  fclose(this->precomputed_data_file);
 }
 
 }  // namespace TVS

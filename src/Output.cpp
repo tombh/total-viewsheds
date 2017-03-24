@@ -2,12 +2,12 @@
 
 #include <plog/Log.h>
 
-#include "definitions.h"
-#include "LinkedList.h"
 #include "DEM.h"
+#include "LinkedList.h"
 #include "Output.h"
 #include "Sector.h"
 #include "Viewsheds.h"
+#include "definitions.h"
 
 namespace TVS {
 
@@ -74,7 +74,7 @@ std::string Output::viewshedToASCII(int viewer) {
     }
   }
 
-  delete [] this->viewshed;
+  delete[] this->viewshed;
   return viewshed_as_text;
 }
 
@@ -117,13 +117,13 @@ void Output::parseSectorPoints() {
       }
       closing = readNextValue();
       if (pov == this->viewer) {
-        if (this->viewshed[opening] == ". " ) {
+        if (this->viewshed[opening] == ". ") {
           this->viewshed[opening] = "+ ";
         } else {
           this->viewshed[opening] = "± ";
         }
 
-        if (this->viewshed[closing] == ". " ) {
+        if (this->viewshed[closing] == ". ") {
           this->viewshed[closing] = "- ";
         } else {
           this->viewshed[closing] = "± ";

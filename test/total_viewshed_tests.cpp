@@ -5,8 +5,11 @@
 #include "../src/Output.h"
 
 std::string calculateTVS() {
+  {
+    Compute compute = Compute();
+    compute.forcePreCompute();
+  }
   Compute compute = Compute();
-  compute.forcePreCompute();
   compute.forceCompute();
   Output output(compute.dem);
   return output.tvsToASCII();

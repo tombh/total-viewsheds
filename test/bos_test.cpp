@@ -125,6 +125,31 @@ TEST_CASE("Bands of sight") {
     }
   }
 
+  SECTION("Compressing bands") {
+    createMockDEM(fixtures::doublePeakDEM);
+
+    SECTION("RLE compression is correct") {
+      Compute compute = reconstructBandsForSector(0);
+      REQUIRE(compute.sector.bos_manager.band_data_size == 36);
+      // First front band
+      REQUIRE(compute.sector.bos_manager.band_markers[0] == 8);
+      REQUIRE(compute.sector.bos_manager.band_data[8 * 2] == 3);
+      REQUIRE(compute.sector.bos_manager.band_data[(8 * 2) + 1] == 9);
+      // First back band
+      REQUIRE(compute.sector.bos_manager.band_markers[9] == 10);
+      REQUIRE(compute.sector.bos_manager.band_data[9 * 2] == 3);
+      REQUIRE(compute.sector.bos_manager.band_data[(9 * 2) + 1] == -9);
+      // Last front band
+      REQUIRE(compute.sector.bos_manager.band_markers[8] == 24);
+      REQUIRE(compute.sector.bos_manager.band_data[8 * 2] == 3);
+      REQUIRE(compute.sector.bos_manager.band_data[(8 * 2) + 1] == 9);
+      // Last back band
+      REQUIRE(compute.sector.bos_manager.band_markers[17] == 26);
+      REQUIRE(compute.sector.bos_manager.band_data[9 * 2] == 3);
+      REQUIRE(compute.sector.bos_manager.band_data[(9 * 2) + 1] == -9);
+    }
+  }
+
   SECTION("Building bands") {
     createMockDEM(fixtures::doublePeakDEM);
 

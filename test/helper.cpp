@@ -76,7 +76,7 @@ void setup() {
   helper::createDirectories();
 }
 
-void tearDown() { emptyDirectories(); }
+void tearDown() { }
 
 void computeDEMFor(DEM *dem, int angle) {
   Axes axes = Axes(*dem);
@@ -131,19 +131,57 @@ void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
 }
 
 Compute reconstructBandsForSector(int angle) {
+  {
+    Compute compute = Compute();
+    compute.forcePreCompute();
+  }
   Compute compute = Compute();
-  compute.dem.setToPrecompute();
-  compute.sector.prepareForPreCompute();
-  compute.sector.changeAngle(angle);
-  compute.sector.sweepThroughAllBands();
+  compute.dem.setToCompute();
+  compute.dem.prepareForCompute();
+  compute.sector.bos_manager.initBandStorage();
+  compute.sector.bos_manager.adjustToAngle(angle);
+  compute.sector.bos_manager.loadBandData();
   return compute;
+}
+
+std::vector<int> uncompressBands(Compute &compute) {
+  int marker, band_point, previous, tvs_id, repetitions, delta, dem_id;
+  int total_band_size = compute.dem.computable_points_count * compute.sector.bos_manager.computable_band_size * 2;
+  std::vector<int> uncompressed(total_band_size);
+  short *compressed = compute.sector.bos_manager.band_data;
+  int points = compute.dem.computable_points_count;
+  int pointer = 0;
+  for (int point = 0; point < points * 2; point++) {
+    if (point < points) {
+      tvs_id = point;
+    } else {
+      tvs_id = point - points;
+    }
+    marker = compute.sector.bos_manager.band_markers[point];
+    dem_id = compute.sector.dem.tvsIdToPOVId(tvs_id);
+    uncompressed[pointer] = dem_id;
+    pointer++;
+    band_point = 1;
+    while (band_point < compute.sector.bos_manager.computable_band_size) {
+      repetitions = compressed[marker];
+      delta = compressed[marker + 1];
+      for (int i = 0; i < repetitions; i++) {
+        dem_id += delta;
+        uncompressed[pointer] = dem_id;
+        pointer++;
+        band_point++;
+      }
+      marker += 2;
+    }
+  }
+  return uncompressed;
 }
 
 std::string reconstructedBandsToASCII(int angle) {
   Compute compute = reconstructBandsForSector(angle);
   int band_size = compute.sector.bos_manager.computable_band_size;
   int points = compute.dem.computable_points_count;
-  int *bands = compute.sector.bos_manager.bands;
+  std::vector<int> bands = uncompressBands(compute);
   return bandStructureToASCII(points, band_size, bands);
 }
 
@@ -181,7 +219,7 @@ std::string bandStructureToASCII(int points, int band_size, float *bands_raw) {
   return bandStructureToASCII(points, band_size, bands);
 }
 
-std::string bandStructureToASCII(int points, int band_size, int *bands_raw) {
+std::string bandStructureToASCII(int points, int band_size, std::vector<int> bands_raw) {
   int array_size = points * band_size * 2;
   std::string bands[array_size];
   for(int i = 0; i < array_size; i++) {

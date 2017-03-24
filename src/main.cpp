@@ -17,8 +17,11 @@ int main(int argc, char *argv[]) {
     TVS::FLAGS_dem_width = 168;
     TVS::FLAGS_dem_height = 168;
     TVS::FLAGS_max_line_of_sight = (168 * 30) / 3;
+    {
+      TVS::Compute compute = TVS::Compute();
+      compute.forcePreCompute();
+    }
     TVS::Compute compute = TVS::Compute();
-    compute.forcePreCompute();
     compute.forceCompute();
     compute.output();
     exit(0);

@@ -31,7 +31,7 @@ Compute reconstructBandsForSector(int);
 std::string reconstructedBandsToASCII(int);
 void computeSweepFor(Compute*, std::string, int, int);
 std::string bandStructureToASCII(int, int, std::string*);
-std::string bandStructureToASCII(int, int, int*);
+std::string bandStructureToASCII(int, int, std::vector<int>);
 std::string bandStructureToASCII(int, int, float*);
 
 #endif

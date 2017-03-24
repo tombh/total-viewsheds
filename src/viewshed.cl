@@ -2,18 +2,13 @@
 kernel void viewshed(
   global const float *elevations,
   global const float *distances,
-  global const int *bands,
-  const int max_los_as_points,
-  const float observer_height,
-  const int dem_width,
-  const int tvs_width,
-  const int computable_points_count,
-  const int reserved_rings,
+  global const short *bands,
+  global const int *band_markers,
   global float *cumulative_surfaces,
   global int *sector_rings
 ) {
 
-  int dem_id, shifted_id, pov_scaled, band_point;
+  int tvs_id, debug;
   float elevation_delta, distance_delta, angle;
   bool above, opening, closing, visible;
 
@@ -21,20 +16,43 @@ kernel void viewshed(
   float max_angle = -2000.0;
   float tan_one_rad = 0.0174533;
   float earth_radius_squared = 12742000.0;
-  int band_start = idx * BAND_SIZE;
-  int band_next = band_start + BAND_SIZE;
-  int pov_id = bands[band_start];
-  float pov_elevation = elevations[pov_id] + observer_height;
+  if (idx < (TOTAL_BANDS / 2)) {
+    tvs_id = idx;
+  } else {
+    tvs_id = idx - (TOTAL_BANDS / 2);
+  }
+  int pov_id = (((tvs_id / TVS_WIDTH) + MAX_LOS_AS_POINTS) * DEM_WIDTH)
+               + ((tvs_id % TVS_WIDTH) + MAX_LOS_AS_POINTS);
+  float pov_elevation = elevations[pov_id] + OBSERVER_HEIGHT;
   float pov_distance = distances[pov_id];
   float band_surface = 0.0;
-  int sector_rings_start = idx * reserved_rings;
+  int sector_rings_start = idx * RESERVED_RINGS;
   int ring_id = 1;
   sector_rings[sector_rings_start + 1] = pov_id; // PoV is always visible
 
-  // TODO: There could well be a performance gain by running this in another
-  // dimension, removing all branches and using an inclusive max scan on the angles.
+  // For decompression of RLE band data
+  int band_pointer = band_markers[idx];
+  int repetitions = bands[band_pointer];
+  short delta = bands[band_pointer + 1];
+  int dem_id = pov_id;
+  int repetition_counter = 0;
+
+  // The kernel's kernel. The most critical code of all.
   for(int i = 1; i < BAND_SIZE; i++) {
-    dem_id = bands[band_start + i];
+
+    // Although decompression incurs extra CPU cycles, it conveniently also reduces
+    // global memory accesses -- `dem_id` is often derived purely from local addition.
+    // On top of which less time is spent getting band data to the GPU in the first
+    // place, because it's compressed.
+    dem_id += delta;
+    repetition_counter++;
+    if (repetition_counter == repetitions) {
+      repetition_counter = 0;
+      band_pointer += 2;
+      repetitions = bands[band_pointer];
+      delta = bands[band_pointer + 1];
+    }
+
     elevation_delta = elevations[dem_id] - pov_elevation;
     distance_delta = fabs(distances[dem_id] - pov_distance);
 
@@ -73,7 +91,7 @@ kernel void viewshed(
       // do not have visual artefacts.
       // TODO: Can this be refactored into a single calculation at the closing
       // of a ring sector?
-      band_surface = band_surface + (distance_delta * tan_one_rad);
+      band_surface += (distance_delta * tan_one_rad);
     }
 
     if (opening) {
@@ -96,5 +114,5 @@ kernel void viewshed(
   // Make a note of how many rings we found
   sector_rings[sector_rings_start] = ring_id;
 
-  cumulative_surfaces[idx] = cumulative_surfaces[idx] + band_surface;
+  cumulative_surfaces[idx] += band_surface;
 }
