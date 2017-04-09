@@ -19,10 +19,10 @@ int main(int argc, char *argv[]) {
     TVS::FLAGS_max_line_of_sight = (168 * 30) / 3;
     {
       TVS::Compute compute = TVS::Compute();
-      compute.forcePreCompute();
+      compute.preCompute();
     }
     TVS::Compute compute = TVS::Compute();
-    compute.forceCompute();
+    compute.compute();
     compute.output();
     exit(0);
   }
@@ -31,11 +31,12 @@ int main(int argc, char *argv[]) {
 
   if(!TVS::FLAGS_is_precompute) {
     printf("Computing (using precomputed data in %s)...\n", TVS::SECTOR_DIR.c_str());
+    compute.compute();
   } else {
     printf("Precomputing %d points...\n", compute.dem.size);
+    compute.preCompute();
   }
 
-  compute.run();
 
   printf("%d DEM points computed\n", compute.dem.size);
 

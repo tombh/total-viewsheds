@@ -1,5 +1,5 @@
-#include <thread>
 #include <stdio.h>
+#include <thread>
 
 #include "BOS.h"
 #include "Clamp.h"
@@ -13,16 +13,13 @@ namespace TVS {
 class Viewsheds {
  public:
   DEM &dem;
-  BOS &bos_manager;
+  BOS &bos;
 
   int sector_angle;
-  int computable_band_size;
-  int computable_bands;
-  int total_band_points;
-  int band_data_size;
   int ring_data_size;
   int reserved_rings;
   int computed_sectors;
+  int batches;
   std::thread *ring_writer_threads;
 
   Clamp cl;
@@ -33,20 +30,20 @@ class Viewsheds {
   ClMem *sector_rings;
   ClMem *distances;
   ClMem *elevations;
-  ClMem *bands;
-  ClMem *band_markers;
+  ClMem *band_deltas;
 
-  Viewsheds(DEM&, BOS&);
-  static void ringDataPath(char*, int);
-  static void threadedWrite(FILE*, int*, int, int);
-  void calculate();
+  Viewsheds(DEM &, BOS &);
+  static void ringDataPath(char *, int);
+  static void threadedWrite(FILE *, int *, int, int);
+  void removeRingData();
   void initialise();
-  void transferDEMData();
+  void prepareMemory();
+  void prepareKernel();
+  void calculate(int);
   void transferSectorData();
   void transferToHost();
   void writeRingData();
 };
-
 }
 
 #endif

@@ -6,7 +6,6 @@
 #include "fixtures.h"
 #include "../src/Compute.h"
 #include "../src/DEM.h"
-#include "../src/Sector.h"
 
 #ifndef TVS_TEST_HELPER_H
 #define TVS_TEST_HELPER_H
@@ -19,19 +18,14 @@ std::string exec(const char *cmd);
 void setup();
 void tearDown();
 void computeDEMFor(DEM*, int);
-void computeBOSFor(Sector*, int, int, std::string);
-void bosLoopToDEMPoint(Sector*, int);
-void bosLoopToSectorPoint(Sector*, int, bool);
+void computeBOSFor(BOS*, int, int, std::string);
 std::string sectorOrderedDEMPointsToASCII(DEM*);
 std::string sightOrderedDEMPointsToASCII(DEM*);
 std::string nodeDistancesToASCII(DEM*);
-std::string bosToASCII(Sector*);
-std::string sweepToASCII(Sector*, std::string);
+std::string bosToASCII(BOS*);
+std::string sweepToASCII(BOS*, std::string);
 Compute reconstructBandsForSector(int);
 std::string reconstructedBandsToASCII(int);
-void computeSweepFor(Compute*, std::string, int, int);
-std::string bandStructureToASCII(int, int, std::string*);
-std::string bandStructureToASCII(int, int, std::vector<int>);
-std::string bandStructureToASCII(int, int, float*);
+std::string bandStructureToASCII(Compute&);
 
 #endif

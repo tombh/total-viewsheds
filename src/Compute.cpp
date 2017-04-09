@@ -1,11 +1,11 @@
-#include <sys/time.h>
-
 #include <plog/Log.h>
 
+#include "Axes.h"
+#include "BOS.h"
 #include "Compute.h"
 #include "DEM.h"
 #include "Output.h"
-#include "Sector.h"
+#include "Viewsheds.h"
 #include "definitions.h"
 #include "helper.h"
 
@@ -13,9 +13,8 @@ namespace TVS {
 
 Compute::Compute()
     : dem(DEM()),
-      sector(Sector(dem)) {}
-
-void Compute::initialize() {
+      bos(BOS(dem)),
+      viewsheds(Viewsheds(dem, bos)){
   this->ensureDEMIsSquare();
   helper::createDirectories();
 }
@@ -27,39 +26,35 @@ void Compute::ensureDEMIsSquare() {
   }
 }
 
-void Compute::forcePreCompute() {
+void Compute::preCompute() {
+  LOG_INFO << "Starting precomputation.";
   this->dem.setToPrecompute();
   this->run();
 }
 
-void Compute::forceCompute() {
+void Compute::compute() {
+  LOG_INFO << "Starting main computation.";
   this->dem.setToCompute();
+  this->viewsheds.initialise();
   this->run();
 }
 
 void Compute::run() {
-  this->initialize();
-
-  if (this->dem.is_computing) {
-    LOG_INFO << "Starting main computation.";
-    this->dem.prepareForCompute();
-    this->sector.prepareForCompute();
-  } else {
-    this->sector.prepareForPreCompute();
-    LOG_INFO << "Starting precomputation.";
-  }
-
   if (FLAGS_single_sector != -1) {
     this->singleSector(FLAGS_single_sector);
   } else {
     this->iterateSectors();
   }
-
   if (this->dem.is_computing) {
     LOG_INFO << "Finished main computation.";
   } else {
     LOG_INFO << "Finished precomputation.";
   }
+}
+
+void Compute::changeAngle(int angle) {
+  Axes axes = Axes(this->dem);
+  axes.adjust(angle);
 }
 
 void Compute::iterateSectors() {
@@ -69,18 +64,18 @@ void Compute::iterateSectors() {
     this->singleSector(angle);
   }
   if (this->dem.is_computing) {
-    this->sector.viewsheds.transferToHost();
+    this->viewsheds.transferToHost();
   }
 }
 
 void Compute::singleSector(int angle) {
   LOGI << "Sector: " << angle;
-  this->sector.changeAngle(angle);
+  this->changeAngle(angle);
   if (this->dem.is_precomputing) {
-    this->sector.sweepThroughAllBands();
+    this->bos.saveBandData(angle);
   }
   if (this->dem.is_computing) {
-    this->sector.calculateViewsheds();
+    this->viewsheds.calculate(angle);
   }
 }
 

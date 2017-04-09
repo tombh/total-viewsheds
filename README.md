@@ -10,6 +10,8 @@ This is an example of a single viewshed from the summit of Mt. Diablo in Califor
 ## Algorithm
 This project is based on the work of S. Tabik, A. R. Cervilla, E. Zapata and L.F. Romero from the University of Málaga, in their paper; [Efficient Data Structure and Highly Scalable Algorithm for Total-Viewshed Computation](www.ac.uma.es/~siham/STARS.pdf).
 
+However it deviates significantly by using Band of Sight 'shapes' rather than calculating the coordinates of every single Band. This has massive space improvement and therefore speed improvement. It also reduces the need for a linked list, further improving the simplicity of the algorithm.
+
 ## Code style
 Styling follows [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
 It can be automated with [`clang-format`](https://clang.llvm.org/docs/ClangFormat.html) (included when installing clang). This repo contains a `.clang-format` file defining the rules for Google's style guide (generated with `clang-format -style=google -dump-config > .clang-format`).
@@ -31,6 +33,6 @@ make
 ## Benchmark
 Intel(R) HD Graphics Cherryview (OpenCL)    
 portishead-benchmark.bt 168x168   
-precompute: ~5.7s   
-compute (including ring writing): ~2.6s   
+precompute: ~0.3s   
+compute (including ring writing): ~2.87s   
 

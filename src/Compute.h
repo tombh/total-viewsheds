@@ -1,5 +1,6 @@
+#include "BOS.h"
 #include "DEM.h"
-#include "Sector.h"
+#include "Viewsheds.h"
 
 #ifndef COMPUTE_H
 #define COMPUTE_H
@@ -9,19 +10,19 @@ namespace TVS {
 class Compute {
  public:
   DEM dem;
-  Sector sector;
+  BOS bos;
+  Viewsheds viewsheds;
 
   Compute();
-  void forcePreCompute();
-  void forceCompute();
+  void preCompute();
+  void compute();
   void run();
-  void sumTVSSurfaces();
   void output();
-
- private:
-  void initialize();
+  void changeAngle(int);
   void iterateSectors();
   void singleSector(int);
+
+ private:
   void ensureDEMIsSquare();
 };
 }

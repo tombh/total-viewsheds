@@ -24,6 +24,7 @@ DECLARE_double(observer_height);
 DECLARE_double(sector_shift);
 DECLARE_int32(band_size);
 DECLARE_int32(reserved_ring_space);
+DECLARE_int32(gpu_batches);
 DECLARE_int32(max_line_of_sight);
 DECLARE_int32(cl_device);
 

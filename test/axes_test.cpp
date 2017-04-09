@@ -3,7 +3,6 @@
 #include "../src/Axes.h"
 #include "../src/Compute.h"
 #include "../src/Output.h"
-#include "../src/Sector.h"
 #include "../src/definitions.h"
 
 SCENARIO("Rotated axes for sectors") {

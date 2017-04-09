@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include "LinkedList.h"
 
 #ifndef DEM_H
 #define DEM_H
@@ -15,7 +14,7 @@ class DEM {
   int size;
   int *sector_ordered;
   int *sight_ordered;
-  float *elevations;
+  short *elevations;
   float *distances;
   int scale;
   int max_los_as_points;

@@ -101,6 +101,16 @@ DEFINE_int32(
 );
 
 DEFINE_int32(
+  gpu_batches,
+  1,
+  "The number of batches of data sent to the GPU for a single sector."
+  "This is currently only relevant for storing the output of ring "
+  "sectors. For example a 2000x2000 DEM with allocated space for 200"
+  "ring sectors per point needs 6.4GB of GPU RAM. By batching into 2"
+  "then only 3.2GB of RAM is needed."
+);
+
+DEFINE_int32(
   total_sectors,
   180,
   "Think of a double-sided lighthouse moving this many times to make a"

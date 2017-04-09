@@ -31,17 +31,18 @@ namespace TVS {
  *       *  .  .  .  .  .  .  .  * -----> x
  *     c                           b
  *
- * Roughly speaking, the Band of Sight always runs parallel to the 'ab'
+ * Roughly speaking, the band of sight always runs parallel to the 'ab'
  * axis and we use the 'cd' axis as a datum to measure relative
- * distances inside the Band of Sight. In reality the 2 new axes do not
- * necessarily intersect in the middle of the DEM.
+ * distances inside the band of sight.
  *
- * This code is surprisingly fast, even without GPU parallelisation. However,
- * it seems a perfect candidate for parallelisation. Yet any performance
- * improvement gains parallelisation might offer would be eclipsed by the band building
- * step of precomputation, which is inherently linear.
+ * TODO: This code is surprisingly fast, even without GPU parallelisation. However,
+ * it's a perfect candidate for parallelisation.
  *
- * NB: Only square DEMs are currently supported.
+ * NB:
+ *   * Only square DEMs are currently supported.
+ *   * This code is still largely unchanged from the sample code provided with S. Tabik
+ *     et al's paper.
+ *
 **/
 
 Axes::Axes(DEM &dem)
@@ -74,7 +75,6 @@ void Axes::adjust(int sector_angle) {
 
 // Orthogonal distance of points relative to the initial Band of Sight.
 // TODO: Can these not be used to populate the sight_ordered index?
-// O(N)
 void Axes::setDistancesFromVerticalAxis() {
   double val;
   for (int x = 0; x < this->dem.width; x++) {
@@ -107,7 +107,6 @@ void Axes::preComputeTrig() {
   tan = std::tan(this->computable_angle);
   cotan = 1 / tan;
 
-  // O(N)
   for (int i = 0; i < this->dem.size; i++) {
     this->isin[i] = i * sin;
     this->icos[i] = i * cos;
@@ -124,20 +123,17 @@ void Axes::preSort() {
 
   tn = std::tan(this->computable_angle);
   ct = 1 / tn;
-  // O(N / height)
   for (int j = 1; j < this->dem.width; j++) {
     this->tmp1[j] = this->tmp1[j - 1] + (int)std::min(this->dem.height, (int)floor(ct * j));
   }
-  // O(N / width)
   for (int i = 1; i < this->dem.height; i++) {
     this->tmp2[i] = this->tmp2[i - 1] + (int)std::min(this->dem.width, (int)floor(tn * i));
   }
 }
 
-// Sort DEM points in order of their distance from the initial Band of Sight
-// line.
+// Sort DEM points in order of their distances from the sector axes (sector_ordered) and their
+// distance from the axes orthogonal to the sector axis (sight_ordered).
 // TODO: Make readable
-// O(N)
 void Axes::sort() {
   double lx = this->dem.width - 1;
   double ly = this->dem.height - 1;

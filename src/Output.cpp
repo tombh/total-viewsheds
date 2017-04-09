@@ -3,15 +3,13 @@
 #include <plog/Log.h>
 
 #include "DEM.h"
-#include "LinkedList.h"
 #include "Output.h"
-#include "Sector.h"
 #include "Viewsheds.h"
 #include "definitions.h"
 
 namespace TVS {
 
-Output::Output(DEM &dem) : dem(dem) {}
+Output::Output(DEM &dem) : dem(dem), viewshed(new std::string[dem.size]) {};
 
 void Output::tvsResults() {
   int col_step, row_step, point;
@@ -58,7 +56,6 @@ std::string Output::tvsToASCII() {
 
 std::string Output::viewshedToASCII(int viewer) {
   std::string viewshed_as_text = "";
-  this->viewshed = new std::string[this->dem.size];
   this->viewer = viewer;
   this->fillViewshedWithDots();
   this->parseSectors();
@@ -85,13 +82,19 @@ void Output::fillViewshedWithDots() {
 }
 
 void Output::parseSectors() {
-  char path_ptr[100];
   for (int sector_angle = 0; sector_angle < FLAGS_total_sectors; sector_angle++) {
-    Viewsheds::ringDataPath(path_ptr, sector_angle);
-    this->sector_file = fopen(path_ptr, "rb");
-    parseSectorPoints();
-    fclose(this->sector_file);
+    this->parseSingleSector(sector_angle, this->viewer);
   }
+}
+
+std::vector<std::vector<int>> Output::parseSingleSector(int angle, int viewer) {
+  char path_ptr[100];
+  this->viewer = viewer;
+  Viewsheds::ringDataPath(path_ptr, angle);
+  this->sector_file = fopen(path_ptr, "rb");
+  std::vector<std::vector<int>> single_band = parseSectorPoints();
+  fclose(this->sector_file);
+  return single_band;
 }
 
 // The format of a ring sector file is a simple array of 4 byte integer
@@ -103,12 +106,25 @@ int Output::readNextValue() {
   return value;
 }
 
-void Output::parseSectorPoints() {
+std::vector<std::vector<int>> Output::parseSectorPoints() {
   int opening, closing, pov, no_of_ring_values;
+  std::vector<int> front_band, back_band;
+  std::vector<std::vector<int>> single_band;
+
   for (int point = 0; point < this->dem.computable_points_count * 2; point++) {
     no_of_ring_values = readNextValue() / 2;
+
     // Assume that every DEM point has an opening at the PoV
     pov = readNextValue();
+
+    if (pov == this->viewer) {
+      if (point < this->dem.computable_points_count) {
+        front_band.push_back(no_of_ring_values);
+      } else {
+        back_band.push_back(no_of_ring_values);
+      }
+    }
+
     for (int iRS = 0; iRS < no_of_ring_values; iRS++) {
       if (iRS == 0) {
         opening = pov;
@@ -116,24 +132,40 @@ void Output::parseSectorPoints() {
         opening = readNextValue();
       }
       closing = readNextValue();
+
       if (pov == this->viewer) {
-        if (this->viewshed[opening] == ". ") {
-          this->viewshed[opening] = "+ ";
+        if (point < this->dem.computable_points_count) {
+          front_band.push_back(opening);
+          front_band.push_back(closing);
         } else {
-          this->viewshed[opening] = "± ";
+          back_band.push_back(opening);
+          back_band.push_back(closing);
         }
-
-        if (this->viewshed[closing] == ". ") {
-          this->viewshed[closing] = "- ";
-        } else {
-          this->viewshed[closing] = "± ";
-        }
-
-        if (opening == closing) {
-          this->viewshed[opening] = "± ";
-        }
+        this->populateViewshed(opening, closing);
       }
     }
+  }
+
+  single_band.push_back(front_band);
+  single_band.push_back(back_band);
+  return single_band;
+}
+
+void Output::populateViewshed(int opening, int closing) {
+  if (this->viewshed[opening] == ". ") {
+    this->viewshed[opening] = "+ ";
+  } else {
+    this->viewshed[opening] = "± ";
+  }
+
+  if (this->viewshed[closing] == ". ") {
+    this->viewshed[closing] = "- ";
+  } else {
+    this->viewshed[closing] = "± ";
+  }
+
+  if (opening == closing) {
+    this->viewshed[opening] = "± ";
   }
 }
 

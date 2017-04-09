@@ -8,7 +8,7 @@ namespace helper {
 
 void init(int, char**);
 void buildPathStrings();
-void createDirectory();
+void createDirectory(std::string);
 void createDirectories();
 
 }

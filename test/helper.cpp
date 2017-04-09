@@ -9,7 +9,6 @@
 
 #include "../src/Axes.h"
 #include "../src/DEM.h"
-#include "../src/Sector.h"
 #include "../src/definitions.h"
 #include "../src/helper.h"
 #include "helper.h"
@@ -117,189 +116,54 @@ std::string nodeDistancesToASCII(DEM *dem) {
   return out.str();
 }
 
-void computeBOSFor(Sector *sector, int angle, int point, std::string ordering) {
-  Axes axes = Axes(sector->dem);
+void computeBOSFor(BOS *bos, int angle) {
+  Axes axes = Axes(bos->dem);
   axes.adjust(angle);
-  sector->dem.setToPrecompute();
-  sector->prepareForPreCompute();
-  sector->sector_angle = angle;
-  sector->bos_manager.setup(angle);
-  if (ordering == "dem-indexed") bosLoopToDEMPoint(sector, point);
-  if (ordering == "sector-indexed") bosLoopToSectorPoint(sector, point, false);
-  if (ordering == "sector-indexed!") bosLoopToSectorPoint(sector, point, true);
-  sector->bos_manager.writeAndClose();
+  bos->dem.setToPrecompute();
+  bos->saveBandData(angle);
 }
 
 Compute reconstructBandsForSector(int angle) {
   {
     Compute compute = Compute();
-    compute.forcePreCompute();
+    compute.preCompute();
   }
   Compute compute = Compute();
   compute.dem.setToCompute();
-  compute.dem.prepareForCompute();
-  compute.sector.bos_manager.initBandStorage();
-  compute.sector.bos_manager.adjustToAngle(angle);
-  compute.sector.bos_manager.loadBandData();
+  compute.changeAngle(angle);
+  compute.bos.loadBandData(angle);
   return compute;
 }
 
-std::vector<int> uncompressBands(Compute &compute) {
-  int marker, band_point, previous, tvs_id, repetitions, delta, dem_id;
-  int total_band_size = compute.dem.computable_points_count * compute.sector.bos_manager.computable_band_size * 2;
-  std::vector<int> uncompressed(total_band_size);
-  short *compressed = compute.sector.bos_manager.band_data;
-  int points = compute.dem.computable_points_count;
-  int pointer = 0;
-  for (int point = 0; point < points * 2; point++) {
-    if (point < points) {
-      tvs_id = point;
-    } else {
-      tvs_id = point - points;
-    }
-    marker = compute.sector.bos_manager.band_markers[point];
-    dem_id = compute.sector.dem.tvsIdToPOVId(tvs_id);
-    uncompressed[pointer] = dem_id;
-    pointer++;
-    band_point = 1;
-    while (band_point < compute.sector.bos_manager.computable_band_size) {
-      repetitions = compressed[marker];
-      delta = compressed[marker + 1];
-      for (int i = 0; i < repetitions; i++) {
-        dem_id += delta;
-        uncompressed[pointer] = dem_id;
-        pointer++;
-        band_point++;
-      }
-      marker += 2;
-    }
-  }
-  return uncompressed;
-}
-
 std::string reconstructedBandsToASCII(int angle) {
-  Compute compute = reconstructBandsForSector(angle);
-  int band_size = compute.sector.bos_manager.computable_band_size;
-  int points = compute.dem.computable_points_count;
-  std::vector<int> bands = uncompressBands(compute);
-  return bandStructureToASCII(points, band_size, bands);
-}
-
-std::string bandStructureToASCII(int points, int band_size, std::string *bands) {
+  int front_dem_id, back_dem_id;
   std::stringstream out;
+  Compute compute = reconstructBandsForSector(angle);
+  int band_size = compute.bos.band_size;
+  int points = compute.dem.computable_points_count;
+
   out << "\n";
   for (int point = 0; point < points; point++) {
-    int front_marker = point * band_size;
-    int front_start = front_marker + band_size - 1;
-    int front_end = front_marker;
-    for (int iband = front_start; iband >= front_end; iband--) {
-      out << bands[iband];
+    std::vector<int> front_band;
+    std::vector<int> back_band;
+    front_dem_id = back_dem_id = compute.dem.tvsIdToPOVId(point);
+    // Build the bands
+    for (int band_point = 0; band_point < band_size; band_point++) {
+      front_band.push_back(front_dem_id);
+      back_band.push_back(back_dem_id);
+      front_dem_id += compute.bos.band_deltas[band_point];
+      back_dem_id -= compute.bos.band_deltas[band_point];
     }
-
-    int back_marker = (point + points) * band_size;
-    int back_start = back_marker;
-    int back_end = back_marker + band_size;
-    for (int iband = back_start; iband < back_end; iband++) {
-      out << bands[iband];
+    // 'Render' the bands
+    for (int band_point = band_size - 1; band_point >= 0; band_point--) {
+      out << std::right << std::setw(3) << std::setfill(' ') << back_band[band_point];
+    }
+    for (int band_point = 0; band_point < band_size; band_point++) {
+      out << std::right << std::setw(3) << std::setfill(' ') << front_band[band_point];
     }
     out << "\n";
   }
   out << "\n";
-  return out.str();
-}
-
-std::string bandStructureToASCII(int points, int band_size, float *bands_raw) {
-  int array_size = points * band_size * 2;
-  std::string bands[array_size];
-  for(int i = 0; i < array_size; i++) {
-    std::stringstream value;
-    value << std::setprecision(2) << std::setw(8) << bands_raw[i];
-    bands[i] = value.str();
-  }
-  return bandStructureToASCII(points, band_size, bands);
-}
-
-std::string bandStructureToASCII(int points, int band_size, std::vector<int> bands_raw) {
-  int array_size = points * band_size * 2;
-  std::string bands[array_size];
-  for(int i = 0; i < array_size; i++) {
-    std::stringstream value;
-    value << std::setw(3) << bands_raw[i];
-    bands[i] = value.str();
-  }
-  return bandStructureToASCII(points, band_size, bands);
-}
-
-void bosLoopToDEMPoint(Sector *sector, int dem_point) {
-  for (int i = 0; i < sector->dem.size; i++) {
-    sector->bos_manager.adjustToNextPoint(i);
-    int idx = sector->bos_manager.bos.LL[sector->bos_manager.pov].dem_id;
-    if (idx == dem_point) break;
-  }
-}
-
-void bosLoopToSectorPoint(Sector *sector, int sector_point, bool is_print_each) {
-  if (is_print_each) {
-    LOGI << "\n" + bosToASCII(sector);
-  }
-  for (int i = 0; i < sector_point; i++) {
-    sector->bos_manager.adjustToNextPoint(i);
-    if (is_print_each) {
-      LOGI << "\n" + bosToASCII(sector);
-    }
-  }
-}
-
-std::string bosToASCII(Sector *sector) {
-  std::stringstream out;
-  out << std::fixed;
-  out.precision(5);
-  LinkedList::LinkedListNode point;
-  for (int i = 0; i < sector->bos_manager.bos.Count; i++) {
-    point = sector->bos_manager.bos.LL[i];
-    out << std::left << std::setw(2) << i;
-    out << std::left << std::setw(3) << point.dem_id;
-    out << std::left << std::setw(3) << sector->dem.sight_ordered[point.dem_id];
-    out << std::left << std::setw(8) << sector->dem.distances[point.dem_id];
-    out << std::right << std::setw(3) << point.prev;
-    out << std::right << std::setw(3) << point.next << " ";
-    if (i == sector->bos_manager.pov) out << "P";
-    if (i == sector->bos_manager.bos.First) out << "F";
-    if (i == sector->bos_manager.bos.Last) out << "L";
-    if (i == sector->bos_manager.bos.Head) out << "H";
-    if (i == sector->bos_manager.bos.Tail) out << "T";
-    out << "\n";
-  }
-  out << "H=" << sector->bos_manager.bos.Head;
-  out << "\n";
-  return out.str();
-}
-
-std::string sweepToASCII(Sector *sector, std::string direction) {
-  std::stringstream out;
-  LinkedList::LinkedListNode point;
-  int end;
-  int sweep = sector->bos_manager.pov;
-  if (direction == "forward") {
-    end = -1;
-  } else if (direction == "backward") {
-    end = -2;
-  } else {
-    LOGE << "Sweep direction neither forward nor backward";
-    exit(1);
-  }
-
-  while (sweep != end) {
-    point = sector->bos_manager.bos.LL[sweep];
-    out << std::left << std::setw(3) << point.dem_id;
-    out << std::left << std::setw(4) << sector->dem.elevations[point.dem_id];
-    out << "\n";
-    if (direction == "forward") {
-      sweep = point.next;
-    } else if (direction == "backward") {
-      sweep = point.prev;
-    }
-  }
   return out.str();
 }
 

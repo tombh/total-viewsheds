@@ -30,10 +30,10 @@
 std::string calculateViewshedFor(int viewer) {
   {
     Compute compute = Compute();
-    compute.forcePreCompute();
+    compute.preCompute();
   }
   Compute compute = Compute();
-  compute.forceCompute();
+  compute.compute();
   Output output = Output(compute.dem);
   return output.viewshedToASCII(viewer);
 }
@@ -48,11 +48,11 @@ TEST_CASE("Basic viewsheds") {
       std::string expected_viewshed =
         ". . . . . . . . . \n"
         ". ± ± ± ± ± ± ± . \n"
-        ". ± . ± . ± . ± . \n"
+        ". ± ± ± . ± ± ± . \n"
         ". ± ± . . . ± ± . \n"
         ". ± . . o . . ± . \n"
         ". ± ± . . . ± ± . \n"
-        ". ± . ± . ± . ± . \n"
+        ". ± ± ± . ± ± ± . \n"
         ". ± ± ± ± ± ± ± . \n"
         ". . . . . . . . . \n";
       std::string result = calculateViewshedFor(40);
@@ -62,11 +62,11 @@ TEST_CASE("Basic viewsheds") {
     SECTION("Viewer in the top left of the TVS grid") {
       std::string expected_viewshed =
         "± ± ± ± ± ± ± . . \n"
-        "± . . . . ± ± . . \n"
-        "± . . . . ± ± . . \n"
-        "± . . o . . ± . . \n"
-        "± . . . . ± ± . . \n"
         "± ± ± . ± ± ± . . \n"
+        "± ± . . ± ± ± . . \n"
+        "± . . o . . ± . . \n"
+        "± ± ± . . ± ± . . \n"
+        "± ± ± . ± ± . . . \n"
         "± ± ± ± ± . . . . \n"
         ". . . . . . . . . \n"
         ". . . . . . . . . \n";
@@ -79,11 +79,11 @@ TEST_CASE("Basic viewsheds") {
     createMockDEM(fixtures::doublePeakDEM);
     std::string expected_viewshed =
       "± ± ± ± ± ± ± . . \n"
-      "± . ± . ± ± ± . . \n"
-      "± ± . . . . ± . . \n"
-      "± . . o . . ± . . \n"
-      "± ± . . . ± ± . . \n"
+      "± ± ± . ± ± ± . . \n"
       "± ± . . ± ± ± . . \n"
+      "± . . o . . ± . . \n"
+      "± ± ± . . ± ± . . \n"
+      "± ± ± . ± ± . . . \n"
       "± ± ± ± ± . ± . . \n"
       ". . . . . . . . . \n"
       ". . . . . . . . . \n";

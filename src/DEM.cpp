@@ -4,7 +4,6 @@
 #include <plog/Log.h>
 
 #include "DEM.h"
-#include "LinkedList.h"
 #include "definitions.h"
 
 namespace TVS {
@@ -40,14 +39,14 @@ DEM::~DEM() {
 }
 
 void DEM::prepareForCompute() {
-  this->elevations = new float[this->size];
+  this->elevations = new short[this->size];
   this->tvs_complete = new float[this->computable_points_count];
   this->setElevations();
 }
 
 void DEM::setElevations() {
   FILE *f;
-  unsigned short num;
+  short elevation;
 
   f = fopen(INPUT_DEM_FILE.c_str(), "rb");
   if (f == NULL) {
@@ -62,8 +61,8 @@ void DEM::setElevations() {
       for (int y = 0; y < this->height; y++) {
         col_step = ((y + 1) * this->width);
         point = row_step - col_step;
-        fread(&num, 2, 1, f);
-        this->elevations[point] = (float)num;
+        fread(&elevation, 2, 1, f);
+        this->elevations[point] = elevation;
       }
     }
   }
