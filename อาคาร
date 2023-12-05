@@ -1,0 +1,38 @@
+  type: int32 default: -1
+-observer_height (Distance the observer is from the ground in metres)
+  type: double default: 1.5
+-output_dir (General output path for precomputation caches and complete
+  results) type: string default: "output"
+-reserved_ring_space (The maximum number of visible rings expected per band
+  of sight.This is a critical value. If it is too low then memory
+  corruptionoccurs. Less critically, if it is too high then performance
+  islost due to unused RAM. All I know so far is that 50 is enoughfor a
+  15km line of sight...) type: int32 default: 50
+-ring_sector_dir (Computed results for ring sector defintions. This is
+  actually the basisdata for fully reconstructing individual viewsheds)
+  type: string default: "ring_sectors"
+-run_benchmarks (Run benchmarks) type: bool default: false
+-sector_dir (Cache for precomputed sector calculations (everything that can
+  be donewithout DEM heights)) type: string default: "sectors"
+-sector_shift (Initial angular shift in sector alignment. This avoids DEM
+  point aligments.Eg; The first sector without shift looks from A to B, but
+  with shift looksfrom A to somehwere between B and C.
+
+  A.  .  .  .  .B
+   .  .  .  .  .C
+   .  .  .  .  .
+   .  .  .  .  .
+   .  .  .  .  .
+
+  NB. The same value MUST be applied to both compute and precompute.)
+  type: double default: 0.001
+-single_sector (Only precompute/compute a single sector angle.
+  Useful for running precomputations in parallel. You could alsopotentially
+  run computations in parallel as well, however, thatonly makes sense if
+  you have multiple GPU devices.) type: int32 default: -1
+-total_sectors (Think of a double-sided lighthouse moving this many times
+  to make afull 360 degree sweep. The algorithm looks forward and backward
+  ineach sector so if moving 1 degree at a time then 180 sectors areneeded)
+  type: int32 default: 180
+-tvs_results_file (Total viewshed values for every point in DEM)
+  type: string default: "tvs.bt"
