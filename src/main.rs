@@ -1,8 +1,9 @@
 mod axes;
+mod band_of_sight;
 mod dem;
 
 fn main() {
-    let shift_angle = 0.001;
-    let mut axes = crate::axes::Axes::new(20000, 0.0, shift_angle);
-    axes.compute();
+    let mut dem = crate::dem::DEM::new(1000, 1.0, 0.001, 100);
+    dem.calculate_axes(0.0);
+    dem.compile_band_data();
 }
