@@ -1,6 +1,6 @@
 //! Calculate DEM properties based on a new set of axes.
 //!
-//! It's easy to imagine the following DEM points based around an intuitive x/y
+//! It's easy to imagine the following DEM points based around an conventional x/y
 //! horizontally/vertically aligned axis. But let's overlay another axis (ab/cd) rotated at an
 //! angle, namely the so-called "sector angle". Here the sector angle is 45 degrees:
 //!
@@ -28,34 +28,58 @@
 //!   * This code is surprisingly fast, even without GPU parallelisation. However, it's a
 //!     perfect candidate for parallelisation.
 
+use color_eyre::Result;
+
+/// `Axes`
 #[derive(Default)]
 pub struct Axes {
+    /// The width of the DEM.
     width: u32,
+    /// The angle for which we are calculating the axes.
     angle: f64,
+    /// The distance of each DEM point from the base of the sector angle. Although exactly where
+    /// the base line lies is not that important, as long it has the correct angle, then positive
+    /// and negative distances relative to it are fine too..
     pub distances: Vec<f64>,
-    pub sight_ordered_map: Vec<usize>,
+    /// DEM IDs ordered by their distance from the sectro axis.
     pub sector_ordered: Vec<u64>,
+    /// This orders the DEM points as their distance from an axis perpendicular to the sector axis.
+    /// But it doesn't contain the DEM IDs themselbes, you give it a DEM ID and it tells you what
+    /// position it is in theordered list.
+    pub sight_ordered_map: Vec<usize>,
 }
 
 impl Axes {
-    pub fn new(width: u32, angle: f64, shift_angle: f64) -> Self {
+    /// Instantiate.
+    pub fn new(width: u32, angle: f64, shift_angle: f64) -> Result<Self> {
         let total_points = u64::from(width).pow(2);
-        let sight_ordered_map: Vec<usize> = (0..total_points as usize).collect();
+        let sight_ordered_map: Vec<usize> = (0..usize::try_from(total_points)?).collect();
         let sector_ordered: Vec<u64> = (0..total_points).collect();
-        Self {
+        Ok(Self {
             width,
             angle: angle + shift_angle,
             distances: Vec::new(),
             sight_ordered_map,
             sector_ordered,
-        }
+        })
     }
 
+    /// Do the main computations.
     pub fn compute(&mut self) {
         self.distances = self.calculate_distances(self.angle);
         let sight_distances = self.order_by_distance(&self.distances);
+
+        #[expect(
+            clippy::as_conversions,
+            clippy::cast_possible_truncation,
+            clippy::indexing_slicing,
+            reason = "
+              We're swapping exactly the same range of numbers, they just have different types
+            "
+        )]
         for (index, dem_id) in sight_distances.iter().enumerate() {
-            self.sight_ordered_map[*dem_id as usize] = index;
+            let dem_id_usize = *dem_id as usize;
+            self.sight_ordered_map[dem_id_usize] = index;
         }
 
         let sector_distances = self.calculate_distances(self.angle + 90.0);
@@ -84,16 +108,21 @@ impl Axes {
     ///
     /// Note that for certain angles either the sight-based line or the sector-based line can pass
     /// inside the DEM.
-    fn calculate_distances(&mut self, angle: f64) -> Vec<f64> {
+    fn calculate_distances(&self, angle: f64) -> Vec<f64> {
         let mut distances = Vec::<f64>::new();
         let sine_of_angle = angle.to_radians().sin();
         let cosine_of_angle = angle.to_radians().cos();
 
-        let range = (-(self.width as i32 - 1)..=0).rev();
+        let range = (-(i64::from(self.width) - 1)..=0).rev();
         for y in range {
             for x in 0..self.width {
-                let left = (x as f64) * sine_of_angle;
-                let right = (y as f64) * cosine_of_angle;
+                let left = f64::from(x) * sine_of_angle;
+                #[expect(
+                    clippy::as_conversions,
+                    clippy::cast_precision_loss,
+                    reason = "We only ever use the i64 up to the negative size of u32"
+                )]
+                let right = y as f64 * cosine_of_angle;
                 let distance = left - right;
                 distances.push(distance);
             }
@@ -105,32 +134,46 @@ impl Axes {
     /// Order by distance, but don't reorder the original data. Instead return the new indexes of
     /// the data if it were ordered.
     fn order_by_distance(&self, distances: &[f64]) -> Vec<u64> {
-        let mut ordered: Vec<u64> = (0..self.width.pow(2) as u64).collect();
+        let mut ordered: Vec<u64> = (0..u64::from(self.width.pow(2))).collect();
+        #[expect(
+            clippy::indexing_slicing,
+            clippy::as_conversions,
+            clippy::cast_possible_truncation,
+            reason = "We're sorting 2 vectors of the same size so out of bounds is impossible"
+        )]
         ordered.sort_by(|&i, &j| {
             let left = distances[i as usize];
             let right = distances[j as usize];
-            left.partial_cmp(&right).unwrap()
+            left.partial_cmp(&right)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         ordered
     }
 }
 
+#[expect(
+    clippy::unreadable_literal,
+    clippy::as_conversions,
+    clippy::default_numeric_fallback,
+    clippy::indexing_slicing,
+    reason = "It's just for the tests"
+)]
 #[cfg(test)]
 mod test {
     use super::*;
 
     fn calculate_axes_at_angle(angle: f64) -> Axes {
         let shift_angle = 0.001;
-        let mut axes = Axes::new(5, angle, shift_angle);
+        let mut axes = Axes::new(5, angle, shift_angle).unwrap();
         axes.compute();
         axes
     }
 
-    fn extract_from_mapped(map: Vec<usize>) -> Vec<u64> {
+    fn extract_from_mapped(map: &[usize]) -> Vec<u64> {
         let mut unmapped = vec![0; map.len()];
         for (index, id) in map.iter().enumerate() {
-            unmapped[*id] = index as u64
+            unmapped[*id] = index as u64;
         }
         unmapped
     }
@@ -163,7 +206,7 @@ mod test {
         //
         #[rustfmt::skip]
         assert_eq!(
-            extract_from_mapped(axes.sight_ordered_map),
+            extract_from_mapped(&axes.sight_ordered_map),
             [
                 0,  1,  2,  3,  4,
                 5,  6,  7,  8,  9,
@@ -223,7 +266,7 @@ mod test {
         //
         #[rustfmt::skip]
         assert_eq!(
-            extract_from_mapped(axes.sight_ordered_map),
+            extract_from_mapped(&axes.sight_ordered_map),
             [
                 20, 21, 15, 22, 16,
                 10, 23, 17, 11, 5,

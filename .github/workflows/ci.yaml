@@ -1,0 +1,63 @@
+name: Rust
+
+# Note: when forking on GitHub, workflows are disabled-by-default; the jobs
+# won't run when pushing to the fork and there won't be a button to run
+# anything manually. Owners of the fork can, through the website, re-enable
+# these workflows to run as specified here.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: 1.88.0
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+    name: Build and Test 🔬
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install $RUST_VERSION --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Build
+        run: cargo build --verbose --all
+      - name: Run tests
+        run: cargo test
+
+  lints:
+    name: "Lints 💅"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install $RUST_VERSION --profile minimal
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-shear, cargo-msrv
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Lint
+        run: cargo clippy -- --deny warnings
+      - name: Formatting
+        run: cargo fmt --check
+      - name: Check for unused dependencies
+        run: cargo shear
+      - name: Verify Minimum Stable Rust Version
+        run: cargo msrv verify
