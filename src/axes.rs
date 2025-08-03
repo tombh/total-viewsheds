@@ -36,25 +36,25 @@ pub struct Axes {
     /// The width of the DEM.
     width: u32,
     /// The angle for which we are calculating the axes.
-    angle: f64,
+    angle: f32,
     /// The distance of each DEM point from the base of the sector angle. Although exactly where
     /// the base line lies is not that important, as long it has the correct angle, then positive
     /// and negative distances relative to it are fine too..
-    pub distances: Vec<f64>,
-    /// DEM IDs ordered by their distance from the sectro axis.
-    pub sector_ordered: Vec<u64>,
-    /// This orders the DEM points as their distance from an axis perpendicular to the sector axis.
-    /// But it doesn't contain the DEM IDs themselbes, you give it a DEM ID and it tells you what
-    /// position it is in theordered list.
+    pub distances: Vec<f32>,
+    /// DEM IDs ordered by their distance from the sector axis.
+    pub sector_ordered: Vec<u32>,
+    /// This orders the DEM points by their distances from an axis perpendicular to the sector axis.
+    /// But it doesn't contain the DEM IDs themselves, you give it a DEM ID and it tells you what
+    /// position it is in the ordered list.
     pub sight_ordered_map: Vec<usize>,
 }
 
 impl Axes {
     /// Instantiate.
-    pub fn new(width: u32, angle: f64, shift_angle: f64) -> Result<Self> {
-        let total_points = u64::from(width).pow(2);
+    pub fn new(width: u32, angle: f32, shift_angle: f32) -> Result<Self> {
+        let total_points = width.pow(2);
         let sight_ordered_map: Vec<usize> = (0..usize::try_from(total_points)?).collect();
-        let sector_ordered: Vec<u64> = (0..total_points).collect();
+        let sector_ordered: Vec<u32> = (0..total_points).collect();
         Ok(Self {
             width,
             angle: angle + shift_angle,
@@ -66,12 +66,12 @@ impl Axes {
 
     /// Do the main computations.
     pub fn compute(&mut self) {
-        self.distances = self.calculate_distances(self.angle);
-        let sight_distances = self.order_by_distance(&self.distances);
+        let distances = self.calculate_distances(self.angle);
+        let sight_distances = self.order_by_distance(&distances);
+        self.convert_distances_to_f32(&distances);
 
         #[expect(
             clippy::as_conversions,
-            clippy::cast_possible_truncation,
             clippy::indexing_slicing,
             reason = "
               We're swapping exactly the same range of numbers, they just have different types
@@ -108,10 +108,11 @@ impl Axes {
     ///
     /// Note that for certain angles either the sight-based line or the sector-based line can pass
     /// inside the DEM.
-    fn calculate_distances(&self, angle: f64) -> Vec<f64> {
+    fn calculate_distances(&self, angle: f32) -> Vec<f64> {
+        let angle_f64 = f64::from(angle);
         let mut distances = Vec::<f64>::new();
-        let sine_of_angle = angle.to_radians().sin();
-        let cosine_of_angle = angle.to_radians().cos();
+        let sine_of_angle = angle_f64.to_radians().sin();
+        let cosine_of_angle = angle_f64.to_radians().cos();
 
         let range = (-(i64::from(self.width) - 1)..=0).rev();
         for y in range {
@@ -133,12 +134,11 @@ impl Axes {
 
     /// Order by distance, but don't reorder the original data. Instead return the new indexes of
     /// the data if it were ordered.
-    fn order_by_distance(&self, distances: &[f64]) -> Vec<u64> {
-        let mut ordered: Vec<u64> = (0..u64::from(self.width.pow(2))).collect();
+    fn order_by_distance(&self, distances: &[f64]) -> Vec<u32> {
+        let mut ordered: Vec<u32> = (0..self.width.pow(2)).collect();
         #[expect(
             clippy::indexing_slicing,
             clippy::as_conversions,
-            clippy::cast_possible_truncation,
             reason = "We're sorting 2 vectors of the same size so out of bounds is impossible"
         )]
         ordered.sort_by(|&i, &j| {
@@ -150,12 +150,24 @@ impl Axes {
 
         ordered
     }
+
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        reason = "
+          We do as much of the cacheable pre-computations using `f64`. But do the most intensive
+          calculations using `f32` for efficieny.
+        "
+    )]
+    /// Convert high precisions distance calculations to `f32` for use on GPUs.
+    fn convert_distances_to_f32(&mut self, distances: &[f64]) {
+        self.distances = distances.iter().map(|&x| x as f32).collect();
+    }
 }
 
 #[expect(
     clippy::unreadable_literal,
     clippy::as_conversions,
-    clippy::default_numeric_fallback,
     clippy::indexing_slicing,
     reason = "It's just for the tests"
 )]
@@ -163,7 +175,7 @@ impl Axes {
 mod test {
     use super::*;
 
-    fn calculate_axes_at_angle(angle: f64) -> Axes {
+    fn calculate_axes_at_angle(angle: f32) -> Axes {
         let shift_angle = 0.001;
         let mut axes = Axes::new(5, angle, shift_angle).unwrap();
         axes.compute();
@@ -180,19 +192,19 @@ mod test {
 
     #[test]
     fn at_0_degrees() {
-        // Zero degrees still gets a 'shift angle' applied, to
-        // prevent point alignments.
+        // To prevent point alignments 0 degrees still gets a 'shift angle'
+        // applied.
         let axes = calculate_axes_at_angle(0.0);
 
         #[rustfmt::skip]
         assert_eq!(
             axes.distances,
             [
-                0.0,                1.7453292519057202e-5, 3.4906585038114403e-5, 5.23598775571716e-5, 6.981317007622881e-5,
-                0.9999999998476913, 1.0000174531402104,    1.0000349064327294,    1.0000523597252484,  1.0000698130177674,
-                1.9999999996953826, 2.0000174529879016,    2.000034906280421,     2.0000523595729396,  2.000069812865459,
-                2.999999999543074,  3.000017452835593,     3.000034906128112,     3.000052359420631,   3.00006981271315,
-                3.999999999390765,  4.000017452683284,     4.000034905975803,     4.000052359268322,   4.000069812560842
+                0.0, 1.7453292e-5, 3.4906585e-5, 5.235988e-5, 6.981317e-5,
+                1.0, 1.0000174,    1.0000349,    1.0000523,   1.0000699,
+                2.0, 2.0000174,    2.0000348,    2.0000525,   2.0000699,
+                3.0, 3.0000174,    3.0000348,    3.0000525,   3.0000699,
+                4.0, 4.0000176,    4.000035,     4.0000525,   4.0000696
             ]
         );
 
@@ -246,11 +258,11 @@ mod test {
         assert_eq!(
             axes.distances,
             [
-                0.0,                 0.7070944397373546,   1.4141888794747093,   2.121283319212064,    2.8283777589494186,
-               -0.7071191224203434, -2.468268298871923e-5, 0.7070697570543659,   1.4141641967917207,   2.1212586365290753,
-               -1.4142382448406867, -0.7071438051033321,  -4.936536597743846e-5, 0.7070450743713772,   1.4141395141087318,
-               -2.12135736726103,   -1.4142629275236756,  -0.7071684877863209,  -7.404804896626871e-5, 0.7070203916883884,
-               -2.8284764896813734, -2.121382049944019,   -1.4142876102066642,  -0.7071931704693095,  -9.873073195487692e-5 
+                0.0,        0.7070944,     1.4141887,     2.121283,      2.8283775,
+                -0.7071192, -2.4857438e-5, 0.7070695,     1.4141638,     2.1212583,
+                -1.4142385, -0.7071441,    -4.9714876e-5, 0.70704466,    1.414139,
+                -2.1213577, -1.4142632,    -0.70716894,   -7.4572315e-5, 0.7070198,
+                -2.828477,  -2.1213825,    -1.4142882,    -0.7071938,    -9.942975e-5
             ]
         );
 

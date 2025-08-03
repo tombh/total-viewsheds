@@ -136,15 +136,15 @@ impl crate::dem::DEM {
 // 72 73 74 75 76 77 78 79 80
 #[expect(
     clippy::as_conversions,
-    clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
     reason = "Test input is known"
 )]
 #[cfg(test)]
 mod test {
     /// Reconstruct bands from deltas.
-    fn reconstruct_bands(angle: f64) -> Vec<Vec<u64>> {
-        let mut dem = crate::dem::DEM::new(9, 1.0, 0.001, 3).unwrap();
+    fn reconstruct_bands(angle: f32) -> Vec<Vec<u32>> {
+        let mut dem = crate::dem::DEM::new(9, 1.0, 0.001, 3);
         assert_eq!(dem.computable_points_count, 9);
         dem.calculate_axes(angle).unwrap();
 
@@ -159,8 +159,8 @@ mod test {
             front_band.push(front_dem_id);
             back_band.push(back_dem_id);
             for delta in &band_deltas {
-                front_dem_id = (front_dem_id as i32 + delta) as u64;
-                back_dem_id = (back_dem_id as i32 - delta) as u64;
+                front_dem_id = (front_dem_id as i32 + delta) as u32;
+                back_dem_id = (back_dem_id as i32 - delta) as u32;
                 front_band.push(front_dem_id);
                 back_band.push(back_dem_id);
             }

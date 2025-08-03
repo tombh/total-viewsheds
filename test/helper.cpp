@@ -135,35 +135,3 @@ Compute reconstructBandsForSector(int angle) {
   return compute;
 }
 
-std::string reconstructedBandsToASCII(int angle) {
-  int front_dem_id, back_dem_id;
-  std::stringstream out;
-  Compute compute = reconstructBandsForSector(angle);
-  int band_size = compute.bos.band_size;
-  int points = compute.dem.computable_points_count;
-
-  out << "\n";
-  for (int point = 0; point < points; point++) {
-    std::vector<int> front_band;
-    std::vector<int> back_band;
-    front_dem_id = back_dem_id = compute.dem.tvsIdToPOVId(point);
-    // Build the bands
-    for (int band_point = 0; band_point < band_size; band_point++) {
-      front_band.push_back(front_dem_id);
-      back_band.push_back(back_dem_id);
-      front_dem_id += compute.bos.band_deltas[band_point];
-      back_dem_id -= compute.bos.band_deltas[band_point];
-    }
-    // 'Render' the bands
-    for (int band_point = band_size - 1; band_point >= 0; band_point--) {
-      out << std::right << std::setw(3) << std::setfill(' ') << back_band[band_point];
-    }
-    for (int band_point = 0; band_point < band_size; band_point++) {
-      out << std::right << std::setw(3) << std::setfill(' ') << front_band[band_point];
-    }
-    out << "\n";
-  }
-  out << "\n";
-  return out.str();
-}
-
