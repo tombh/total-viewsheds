@@ -11,6 +11,8 @@ use color_eyre::Result;
 pub struct DEM {
     /// Trigonomic data about the points when you rotate the DEM through certain angles.
     pub axes: crate::axes::Axes,
+    /// All the elevation data.
+    pub elevations: Vec<f32>,
     /// The width of the DEM.
     pub width: u32,
     /// The width of the computable sub-grid within the DEM. Consider a point on the edge of the
@@ -18,17 +20,17 @@ pub struct DEM {
     /// point further inside the DEM.
     pub tvs_width: u32,
     /// The total number of points in the DEM.
-    pub size: u64,
+    pub size: u32,
     /// The size of each point in meters.
-    pub scale: f64,
+    pub scale: f32,
     /// Initial angular shift in sector alignment. This avoids DEM point aligments.
-    pub shift_angle: f64,
+    pub shift_angle: f32,
     /// The maximum distance in metres to search for visible points.
     pub max_line_of_sight: u32,
     /// The maximum distance in terms of points to search.
     pub max_los_as_points: u32,
     /// The total number of points that can have full viewsheds calculated for them.
-    pub computable_points_count: u64,
+    pub computable_points_count: u32,
     /// The size of a "band of sight". This is generally the number of points that fit into the max
     /// line of sight. But it could be more, not to increase the distance, but to improve
     /// interpolation.
@@ -37,18 +39,20 @@ pub struct DEM {
 
 impl DEM {
     /// `Instantiate`
-    pub fn new(width: u32, scale: f64, shift_angle: f64, max_line_of_sight: u32) -> Result<Self> {
-        let size = u64::from(width * width);
+    pub fn new(width: u32, scale: f32, shift_angle: f32, max_line_of_sight: u32) -> Self {
+        let size = width * width;
         #[expect(
             clippy::cast_possible_truncation,
             clippy::as_conversions,
             clippy::cast_sign_loss,
+            clippy::cast_precision_loss,
             reason = "This shouldn't be a problem in most sane cases"
         )]
-        let max_los_as_points = (f64::from(max_line_of_sight) / scale) as u32;
+        let max_los_as_points = (max_line_of_sight as f32 / scale) as u32;
 
         let mut dem = Self {
             axes: crate::axes::Axes::default(),
+            elevations: Vec::default(),
             width,
             tvs_width: 0,
             size,
@@ -60,8 +64,8 @@ impl DEM {
             band_size: max_los_as_points + 1,
         };
         dem.count_computable_points();
-        dem.tvs_width = u32::try_from(dem.computable_points_count.isqrt())?;
-        Ok(dem)
+        dem.tvs_width = dem.computable_points_count.isqrt();
+        dem
     }
 
     /// Count the number of points in the DEM that can have their viewsheds fully calculated.
@@ -84,14 +88,13 @@ impl DEM {
           We're just calculating _what's_ computable, not doing the calculations themselves.
         "
     )]
-    fn is_point_computable(&self, dem_id: u64) -> bool {
-        let width_u64 = u64::from(self.width);
-        let max_line_of_sight_f64 = f64::from(self.max_line_of_sight);
-        let x = (dem_id.rem_euclid(width_u64)) as f64 * self.scale;
-        let y = (dem_id.div_euclid(width_u64)) as f64 * self.scale;
-        let lower = max_line_of_sight_f64;
+    fn is_point_computable(&self, dem_id: u32) -> bool {
+        let max_line_of_sight_f32 = self.max_line_of_sight as f32;
+        let x = (dem_id.rem_euclid(self.width)) as f32 * self.scale;
+        let y = (dem_id.div_euclid(self.width)) as f32 * self.scale;
+        let lower = max_line_of_sight_f32;
         #[expect(clippy::suboptimal_flops, reason = "Readability is more important")]
-        let upper = (f64::from(self.width - 1) * self.scale) - max_line_of_sight_f64;
+        let upper = ((self.width - 1) as f32 * self.scale) - max_line_of_sight_f32;
         x >= lower && x <= upper && y >= lower && y <= upper
     }
 
@@ -107,16 +110,14 @@ impl DEM {
 
     /// Convert a computable sub-DEM ID to its original DEM ID.
     #[cfg(test)]
-    pub fn tvs_id_to_pov_id(&self, tvs_id: u64) -> u64 {
-        let max_los_as_points_u64 = u64::from(self.max_los_as_points);
-        let tvs_width_u64 = u64::from(self.tvs_width);
-        let x = tvs_id.rem_euclid(tvs_width_u64) + max_los_as_points_u64;
-        let y = tvs_id.div_euclid(tvs_width_u64) + max_los_as_points_u64;
-        (y * u64::from(self.width)) + x
+    pub const fn tvs_id_to_pov_id(&self, tvs_id: u32) -> u32 {
+        let x = tvs_id.rem_euclid(self.tvs_width) + self.max_los_as_points;
+        let y = tvs_id.div_euclid(self.tvs_width) + self.max_los_as_points;
+        (y * self.width) + x
     }
 
     /// Do the calculations needed to create bands for a new angle.
-    pub fn calculate_axes(&mut self, angle: f64) -> Result<()> {
+    pub fn calculate_axes(&mut self, angle: f32) -> Result<()> {
         self.axes = crate::axes::Axes::new(self.width, angle, self.shift_angle)?;
         self.axes.compute();
         Ok(())

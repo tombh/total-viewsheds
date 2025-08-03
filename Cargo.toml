@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 
 [dependencies]
+clap = { version = "4.5.42", features = ["derive"] }
 color-eyre = "0.6.5"
 
 
