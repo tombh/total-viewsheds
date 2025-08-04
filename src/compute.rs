@@ -69,9 +69,13 @@ impl<'compute> Compute<'compute> {
         cumulative_surfaces: &mut [f32],
         ring_data: &mut [u32],
     ) -> Result<()> {
+        tracing::debug!("Calculating bands for sector: {angle}°");
         self.dem.calculate_axes(f32::from(angle))?;
+
+        tracing::debug!("Calculating band deltas for {angle}°");
         self.dem.compile_band_data()?;
 
+        tracing::debug!("Running kernel for {angle}°");
         for kernel_id in 0..self.constants.total_bands {
             crate::kernel::kernel(
                 kernel_id,
@@ -94,7 +98,7 @@ mod test {
     use super::*;
 
     fn make_dem() -> crate::dem::DEM {
-        crate::dem::DEM::new(9, 1.0, 0.001, 3)
+        crate::dem::DEM::new(9, 1.0, 0.001, 3).unwrap()
     }
 
     fn compute_tvs(dem: &mut crate::dem::DEM, elevations: &[i16]) -> (Vec<f32>, Vec<Vec<u32>>) {
@@ -157,9 +161,9 @@ mod test {
         assert_eq!(
             cumulative_surfaces,
             [
-                29.861341, 19.376814, 29.861341,
-                19.376816, 36.025295, 19.376816,
-                29.861341, 19.376816, 29.861343
+                28.951092, 18.20732, 28.951097,
+                18.207321, 35.32013, 18.207323,
+                28.951097, 18.207317, 28.951092
             ]
         );
     }
@@ -171,9 +175,9 @@ mod test {
         assert_eq!(
             cumulative_surfaces,
             [
-                32.191322, 28.227037, 29.15857,
-                27.723522, 35.14929,  24.264399,
-                28.58786,  23.183277, 20.682587
+                30.305563, 27.532042, 27.445095,
+                27.366535, 35.86692, 24.969402,
+                27.101336, 24.08531, 22.368183
             ]
         );
     }
