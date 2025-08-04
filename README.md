@@ -6,7 +6,8 @@ Calculates the total visible surface from every point of a given terrain. For ex
 This is an example of a single viewshed from the summit of Mt. Diablo in California. It was created by another viewshed tool called [Caltopo](https://caltopo.com).
 
 ## Algorithm
-This project is based on the work of S. Tabik, A. R. Cervilla, E. Zapata and L.F. Romero from the University of Málaga, in their paper; [Efficient Data Structure and Highly Scalable Algorithm for Total-Viewshed Computation](www.ac.uma.es/~siham/STARS.pdf).
+This project is based on the work of Siham Tabik, Antonio R. Cervilla, Emilio Zapata, Luis F. Romero in their
+paper _Efficient Data Structure and Highly Scalable Algorithm for Total-Viewshed Computation_: https://ieeexplore.ieee.org/document/6837455
 
 However it notably improves on it by using Band of Sight 'shapes' rather than calculating the coordinates of every single Band. This has massive space improvement and therefore speed improvement. It also reduces the need for a linked list, further improving the simplicity of the algorithm.
 
@@ -55,12 +56,10 @@ Options:
           Print help (see a summary with '-h')
 ```
 
-## Notes
+## License
+The license is the same as that used for the original paper's sample code: https://github.com/SihamTabik/Total_Viewshed
 
-### The paper
-* Efficient Data Structure and Highly Scalable Algorithm for Total-Viewshed Computation.
-* Siham Tabik, Antonio R. Cervilla, Emilio Zapata, Luis F. Romero.
-* https://ieeexplore.ieee.org/document/6837455
+## Notes
 
 ### View Finder Panoramas by Jonathon de Ferranti
 The holy grail of DEM data. He's done all the work to clean ad void fill the DEM data
@@ -96,6 +95,4 @@ https://calgaryvisioncentre.com/news/2017/6/23/tdgft1bsbdlm8496ov7tn73kr0ci1q
 * [ ] Cache pre-computations to disk.
 * [ ] Why is computing 0° so much faster than computing 1° and 45° so much faster than 46°??
 * [ ] `--rings-per-km` doesn't seem intuitive and doesn't give an informative error when it fails.
-
-
 
