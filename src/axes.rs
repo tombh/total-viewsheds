@@ -66,6 +66,8 @@ impl Axes {
 
     /// Do the main computations.
     pub fn compute(&mut self) {
+        tracing::debug!("Calculating axes for {}°", self.angle);
+
         let distances = self.calculate_distances(self.angle);
         let sight_distances = self.order_by_distance(&distances);
         self.convert_distances_to_f32(&distances);

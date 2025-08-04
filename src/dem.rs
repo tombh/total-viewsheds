@@ -39,7 +39,7 @@ pub struct DEM {
 
 impl DEM {
     /// `Instantiate`
-    pub fn new(width: u32, scale: f32, shift_angle: f32, max_line_of_sight: u32) -> Self {
+    pub fn new(width: u32, scale: f32, shift_angle: f32, max_line_of_sight: u32) -> Result<Self> {
         let size = width * width;
         #[expect(
             clippy::cast_possible_truncation,
@@ -49,6 +49,15 @@ impl DEM {
             reason = "This shouldn't be a problem in most sane cases"
         )]
         let max_los_as_points = (max_line_of_sight as f32 / scale) as u32;
+        let max_possible_los_as_points = width.div_euclid(2);
+
+        if max_los_as_points > max_possible_los_as_points {
+            color_eyre::eyre::bail!(
+                "The maximum line of sight ({max_line_of_sight}m) is longer than the maximum \
+                distance that any point can completely see ({}m).",
+                f64::from(max_possible_los_as_points) * f64::from(scale)
+            );
+        }
 
         let mut dem = Self {
             axes: crate::axes::Axes::default(),
@@ -61,11 +70,14 @@ impl DEM {
             max_line_of_sight,
             max_los_as_points,
             computable_points_count: 0,
+            // Add 1 just to be sure that we always compute points within the line of sight, and no
+            // less.
             band_size: max_los_as_points + 1,
         };
+        tracing::debug!("band_size: {}", dem.band_size);
         dem.count_computable_points();
         dem.tvs_width = dem.computable_points_count.isqrt();
-        dem
+        Ok(dem)
     }
 
     /// Count the number of points in the DEM that can have their viewsheds fully calculated.

@@ -35,8 +35,19 @@
 //! perpendicular distance each '+' point is from the `PoV` '(+)'. To then
 //! order this specific subset of the DEM we use the `sight_ordered`
 //! points.
+//!
+//! Note that the size of the `BoS` is defined via the maximum line of sight.
+//! The maximum line of sight is converted to the number of non-diagonal
+//! DEM points that would reach such a distance and that is used to define the
+//! size of the `BoS`. Note that for diagonal distances the same number of points
+//! will actually reach further, namely √2 times further in the extreme case,
+//! (calculated from how much longer the diagonal of a square is than its width).
+//! So this over-fitting shouldn't be a problem.
 
 use color_eyre::Result;
+
+/// How much bigger the diagonal of a square is compared to its width.
+const DIAGANOL_GREATER_THAN_WIDTH: f64 = core::f64::consts::SQRT_2;
 
 impl crate::dem::DEM {
     /// These deltas apply to *all* possible bands in this sector.
@@ -44,15 +55,37 @@ impl crate::dem::DEM {
         let mut dem_ids_to_compute = Vec::new();
         let mut distance_ids = Vec::new();
 
+        // We subtract one because there are always 1 fewer deltas in a set than there are actual
+        // items in the set.
         let band_deltas_size = self.band_size - 1;
         let mut band_deltas = vec![0i32; usize::try_from(band_deltas_size)?];
 
-        // Increasing the band size is effectively like interpolating. The wider the band
-        // the more points have the ability to block or count towards visibility for any
-        // given line of sight. Adding a couple more points ensures that the band isn't
-        // so thin that the line of sight 'slips' between DEM points, effectively
-        // interpolating nothing.
-        let band_samples = usize::try_from((self.band_size * 2) + 2)?;
+        // In order for the line of sight not to "slip through" DEM points because it's too thin,
+        // we need to ensure a minimum density of points. I don't think this step is mentioned in
+        // the original paper, so I could be wrong. My thinking is that light cannot slip through
+        // a perfect horizontal or vertical line of points. So the density in such a case is
+        // exactly one point per point length. But in the diagonal worst case, say 45°, that same
+        // density is not naturally reached. Another way to look at this is imagining that the band
+        // of sight is created from 2 parallel lines of consistent distance from each other. In say
+        // the horizontal case the band is naturally filled with 1 point for every point length,
+        // but in the diagonal case it's only filled with 1/√2 points per point length. So in order
+        // to handle the worst case we must increase the density by √2.
+        //
+        // Note that this doesn't actually increase the size of the final band deltas vector. These
+        // are just the samples from which we calculate the deltas.
+        //
+        // TODO:
+        // Should this be calculated on a per-angle basis? So that each band has the same affective
+        // density of points?
+        #[expect(
+            clippy::as_conversions,
+            clippy::cast_sign_loss,
+            clippy::cast_possible_truncation,
+            reason = "
+              Accuracy is not required here, we just need a big enough numnber for the worst case.
+            "
+        )]
+        let band_samples = (f64::from(self.band_size * 2) * DIAGANOL_GREATER_THAN_WIDTH) as usize;
 
         // Find the very middle of the DEM. This is arbitrary as we ultimately only care about
         // deltas.
@@ -116,7 +149,8 @@ impl crate::dem::DEM {
             let current_sector_id = distances_to_sector_ids_map[band_id];
             let current = i32::try_from(dem_ids_to_compute[current_sector_id])?;
             let next = i32::try_from(dem_ids_to_compute[distances_to_sector_ids_map[band_id + 1]])?;
-            band_deltas[i] = current - next;
+            let delta = current - next;
+            band_deltas[i] = delta;
         }
 
         Ok(band_deltas)
@@ -144,7 +178,7 @@ impl crate::dem::DEM {
 mod test {
     /// Reconstruct bands from deltas.
     fn reconstruct_bands(angle: f32) -> Vec<Vec<u32>> {
-        let mut dem = crate::dem::DEM::new(9, 1.0, 0.001, 3);
+        let mut dem = crate::dem::DEM::new(9, 1.0, 0.001, 3).unwrap();
         assert_eq!(dem.computable_points_count, 9);
         dem.calculate_axes(angle).unwrap();
 
@@ -202,16 +236,15 @@ mod test {
         assert_eq!(
             bands,
             [
-                [49, 40, 39, 30], [30, 21, 20, 11],
-                [50, 41, 40, 31], [31, 22, 21, 12],
-                [51, 42, 41, 32], [32, 23, 22, 13],
-                [58, 49, 48, 39], [39, 30, 29, 20],
-                [59, 50, 49, 40], [40, 31, 30, 21],
-                [60, 51, 50, 41], [41, 32, 31, 22],
-                [67, 58, 57, 48], [48, 39, 38, 29],
-                [68, 59, 58, 49], [49, 40, 39, 30],
-                [69, 60, 59, 50], [50, 41, 40, 31]
-            ]
+                [49, 48, 39, 30], [30, 21, 12, 11],
+                [50, 49, 40, 31], [31, 22, 13, 12],
+                [51, 50, 41, 32], [32, 23, 14, 13],
+                [58, 57, 48, 39], [39, 30, 21, 20],
+                [59, 58, 49, 40], [40, 31, 22, 21],
+                [60, 59, 50, 41], [41, 32, 23, 22],
+                [67, 66, 57, 48], [48, 39, 30, 29],
+                [68, 67, 58, 49], [49, 40, 31, 30],
+                [69, 68, 59, 50], [50, 41, 32, 31]]
         );
     }
 

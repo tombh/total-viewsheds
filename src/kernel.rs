@@ -98,13 +98,12 @@ pub fn kernel(
     };
 
     let pov_x = tvs_id.rem_euclid(constants.tvs_width) + constants.max_los_as_points;
-    let pov_y = ((tvs_id.div_euclid(constants.tvs_width)) + constants.max_los_as_points)
-        * constants.dem_width;
+    let pov_y = (tvs_id.div_euclid(constants.tvs_width)) + constants.max_los_as_points;
     #[expect(
         clippy::as_conversions,
         reason = "This needs to run on the GPU where fallibility isn't possible"
     )]
-    let pov_id = (pov_y + pov_x) as usize;
+    let pov_id = ((pov_y * constants.dem_width) + pov_x) as usize;
 
     // The PoV is involved in every calculation, so do now and save for later.
     let pov_elevation = elevations[pov_id] + constants.observer_height;
@@ -130,8 +129,7 @@ pub fn kernel(
     // Passing the band size as a compiler argument allows for optimisation through
     // loop unrolling.
     for delta in deltas {
-        // Derive the new DEM ID. Note that band_direction can only be +/- 1 depending
-        // on whether this is a front- or back-facing band.
+        // Derive the new DEM ID.
         dem_id = match band_direction {
             BandDirection::Forward => delta_add(dem_id, *delta),
             BandDirection::Backward => delta_subtract(dem_id, *delta),
