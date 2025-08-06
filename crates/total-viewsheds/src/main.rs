@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         tile.data.len(),
     );
 
-    let mut dem = crate::dem::DEM::new(width, scale, config.sector_shift, max_line_of_sight)?;
+    let mut dem = crate::dem::DEM::new(width, scale, max_line_of_sight)?;
     tracing::info!("Converting DEM data to `f32`");
     dem.elevations = tile.data.iter().map(|point| f32::from(*point)).collect();
 

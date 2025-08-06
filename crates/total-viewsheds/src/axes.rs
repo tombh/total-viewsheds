@@ -51,13 +51,13 @@ pub struct Axes {
 
 impl Axes {
     /// Instantiate.
-    pub fn new(width: u32, angle: f32, shift_angle: f32) -> Result<Self> {
+    pub fn new(width: u32, angle: f32) -> Result<Self> {
         let total_points = width.pow(2);
         let sight_ordered_map: Vec<usize> = (0..usize::try_from(total_points)?).collect();
         let sector_ordered: Vec<u32> = (0..total_points).collect();
         Ok(Self {
             width,
-            angle: angle + shift_angle,
+            angle: angle + crate::dem::SECTOR_SHIFT,
             distances: Vec::new(),
             sight_ordered_map,
             sector_ordered,
@@ -178,8 +178,7 @@ mod test {
     use super::*;
 
     fn calculate_axes_at_angle(angle: f32) -> Axes {
-        let shift_angle = 0.001;
-        let mut axes = Axes::new(5, angle, shift_angle).unwrap();
+        let mut axes = Axes::new(5, angle).unwrap();
         axes.compute();
         axes
     }
