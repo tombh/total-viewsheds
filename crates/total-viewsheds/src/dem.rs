@@ -7,6 +7,17 @@
 
 use color_eyre::Result;
 
+/// Initial angular shift in sector alignment. This avoids DEM point aligments.
+/// Eg; The first sector without shift looks from A to B, but with shift looks from A to somehwere
+/// between B and C:
+///
+/// A. . . . .B
+///  . . . . .C
+///  . . . . .
+///  . . . . .
+///  . . . . .
+pub const SECTOR_SHIFT: f32 = 0.001;
+
 /// `DEM`
 pub struct DEM {
     /// Trigonomic data about the points when you rotate the DEM through certain angles.
@@ -23,8 +34,6 @@ pub struct DEM {
     pub size: u32,
     /// The size of each point in meters.
     pub scale: f32,
-    /// Initial angular shift in sector alignment. This avoids DEM point aligments.
-    pub shift_angle: f32,
     /// The maximum distance in metres to search for visible points.
     pub max_line_of_sight: u32,
     /// The maximum distance in terms of points to search.
@@ -39,7 +48,7 @@ pub struct DEM {
 
 impl DEM {
     /// `Instantiate`
-    pub fn new(width: u32, scale: f32, shift_angle: f32, max_line_of_sight: u32) -> Result<Self> {
+    pub fn new(width: u32, scale: f32, max_line_of_sight: u32) -> Result<Self> {
         let size = width * width;
         #[expect(
             clippy::cast_possible_truncation,
@@ -66,7 +75,6 @@ impl DEM {
             tvs_width: 0,
             size,
             scale,
-            shift_angle,
             max_line_of_sight,
             max_los_as_points,
             computable_points_count: 0,
@@ -130,7 +138,7 @@ impl DEM {
 
     /// Do the calculations needed to create bands for a new angle.
     pub fn calculate_axes(&mut self, angle: f32) -> Result<()> {
-        self.axes = crate::axes::Axes::new(self.width, angle, self.shift_angle)?;
+        self.axes = crate::axes::Axes::new(self.width, angle)?;
         self.axes.compute();
         Ok(())
     }

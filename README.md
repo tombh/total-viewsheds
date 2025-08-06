@@ -41,26 +41,13 @@ Options:
 
           [default: 1.65]
 
-      --sector-shift <Degrees of offset for each sector>
-          Initial angular shift in sector alignment. This avoids DEM point aligments.
-          Eg; The first sector without shift looks from A to B, but with shift
-          looksfrom A to somehwere between B and C.
-
-          A.  .  .  .  .B
-           .  .  .  .  .C
-           .  .  .  .  .
-           .  .  .  .  .
-           .  .  .  .  .
-
-          [default: 0.001]
-
       --compute <The method of running the kernel>
           Where to run the kernel calculations
 
           [default: vulkan]
 
           Possible values:
-          - cpu:    Normally on the CPU
+          - cpu:    Conventional CPU computations. The slowest method
           - vulkan: A SPIRV shader run on the GPU via Vulkan
           - cuda:   TBC
 

@@ -28,22 +28,6 @@ pub struct Config {
         default_value = "1.65"
     )]
     pub observer_height: f32,
-    /// Initial angular shift in sector alignment. This avoids DEM point aligments.
-    /// Eg; The first sector without shift looks from A to B, but with shift
-    /// looksfrom A to somehwere between B and C.
-    ///
-    /// A.  .  .  .  .B
-    ///  .  .  .  .  .C
-    ///  .  .  .  .  .
-    ///  .  .  .  .  .
-    ///  .  .  .  .  .
-    #[arg(
-        long,
-        verbatim_doc_comment,
-        value_name = "Degrees of offset for each sector",
-        default_value = "0.001"
-    )]
-    pub sector_shift: f32,
     /// Where to run the kernel calculations.
     #[arg(
         long,

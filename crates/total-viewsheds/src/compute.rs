@@ -172,7 +172,7 @@ mod test {
     use super::*;
 
     fn make_dem() -> crate::dem::DEM {
-        crate::dem::DEM::new(9, 1.0, 0.001, 3).unwrap()
+        crate::dem::DEM::new(9, 1.0, 3).unwrap()
     }
 
     fn compute_tvs(dem: &mut crate::dem::DEM, elevations: &[i16]) -> (Vec<f32>, Vec<Vec<u32>>) {

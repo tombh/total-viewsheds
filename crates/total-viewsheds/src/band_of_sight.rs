@@ -178,7 +178,7 @@ impl crate::dem::DEM {
 mod test {
     /// Reconstruct bands from deltas.
     fn reconstruct_bands(angle: f32) -> Vec<Vec<u32>> {
-        let mut dem = crate::dem::DEM::new(9, 1.0, 0.001, 3).unwrap();
+        let mut dem = crate::dem::DEM::new(9, 1.0, 3).unwrap();
         assert_eq!(dem.computable_points_count, 9);
         dem.calculate_axes(angle).unwrap();
 
