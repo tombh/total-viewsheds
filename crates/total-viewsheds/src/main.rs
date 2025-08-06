@@ -2,17 +2,18 @@
 
 use clap::Parser as _;
 use color_eyre::eyre::Result;
-use tracing_subscriber::{Layer as _, layer::SubscriberExt as _, util::SubscriberInitExt as _};
+use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _, Layer as _};
 
 mod axes;
 mod band_of_sight;
 mod compute;
 mod config;
 mod dem;
-mod kernel;
+mod gpu;
 /// Various ways to output data.
 mod output {
     pub mod ascii;
+    pub mod png;
 }
 
 fn main() -> Result<()> {
@@ -53,7 +54,12 @@ fn main() -> Result<()> {
     dem.elevations = tile.data.iter().map(|point| f32::from(*point)).collect();
 
     tracing::info!("Starting computations");
-    let mut compute = crate::compute::Compute::new(&mut dem, config.rings_per_km)?;
+    let mut compute = crate::compute::Compute::new(
+        config.compute,
+        Some(config.output_dir),
+        &mut dem,
+        config.rings_per_km,
+    )?;
     compute.run()?;
 
     Ok(())

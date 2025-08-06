@@ -19,6 +19,8 @@ You will need a `.hgt` file. They can be downloaded in zip batches from: https:/
 
 Example: `RUST_LOG=debug cargo run -- --input N51W002.hgt`
 
+A heatmap of total viewshed surface areas will be saved to `./heatmap.png`. The path can be changed with `--output-dir path/to/dir`. Note that the same image file is updated for every sector angle, so you can watch the details improve as the computatioin progresses.
+
 ```
 Usage: total-viewsheds [OPTIONS] --input <Path to the DEM file>
 
@@ -32,7 +34,7 @@ Options:
       --rings-per-km <Expected rings per km>
           Size of each DEM point The maximum number of visible rings expected per km of band of sight. This is the number of times land may appear and disappear for an observer looking out into the distance. The value is used to decide how much memory is reserved for collecting ring data. So if it is too low then the program may panic. If it is too high then performance is lost due to unused RAM
 
-          [default: 3.3333333]
+          [default: 5]
 
       --observer-height <Height of observer in meters>
           The height of the observer in meters
@@ -52,9 +54,30 @@ Options:
 
           [default: 0.001]
 
+      --compute <The method of running the kernel>
+          Where to run the kernel calculations
+
+          [default: vulkan]
+
+          Possible values:
+          - cpu:    Normally on the CPU
+          - vulkan: A SPIRV shader run on the GPU via Vulkan
+          - cuda:   TBC
+
+      --output-dir <Directory to save output to>
+          Path to save the heatmap of the total viewshed surfaces
+
+          [default: ./]
+
   -h, --help
           Print help (see a summary with '-h')
 ```
+
+## Building Vulkan shader
+* Install `cargo-gpu`: `cargo install --git https://github.com/rust-gpu/cargo-gpu cargo-gpu`
+* Compile: `cargo gpu build --shader-crate crates/shader`
+
+Note that the pre-compiled shader already comes with the source code (at `crates/shader/total_viewsheds_kernel.spv`). So you only need to compile the shader if you're developing it.
 
 ## License
 The license is the same as that used for the original paper's sample code: https://github.com/SihamTabik/Total_Viewshed
@@ -80,7 +103,7 @@ User guide: https://lpdaac.usgs.gov/documents/179/SRTM_User_Guide_V3.pdf
 ### GDAL support for the .hgt format
 https://gdal.org/drivers/raster/srtmhgt.html
 
-### Claim of Krygystam 538km LoS and cool 3D graphic
+### Claim of Krygystan 538km LoS and cool 3D graphic
 https://calgaryvisioncentre.com/news/2017/6/23/tdgft1bsbdlm8496ov7tn73kr0ci1q
 
 ### Misc

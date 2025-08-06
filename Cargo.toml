@@ -1,16 +1,8 @@
-[package]
-name = "total-viewsheds"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.88"
-
-[dependencies]
-clap = { version = "4.5.42", features = ["derive"] }
-color-eyre = "0.6.5"
-srtm_reader = "0.5.1"
-tracing = { version = "0.1.41" }
-tracing-subscriber = { version = "0.3.19", default-features = false, features = ["env-filter", "ansi"] }
-
+[workspace]
+resolver = "2"
+members = [
+    "crates/total-viewsheds",
+]
 
 # Canonical lints for whole crate
 #
@@ -22,11 +14,12 @@ tracing-subscriber = { version = "0.3.19", default-features = false, features = 
 # We set base lints to give the fullest, most pedantic feedback possible.
 # Though we prefer that they are just warnings during development so that build-denial
 # is only enforced in CI.
-[lints.rust]
+[workspace.lints.rust]
 # It's always good to write as much documentation as possible
 missing_docs = "warn"
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(target_arch, values("spirv"))'] }
 
-[lints.clippy]
+[workspace.lints.clippy]
 # `clippy::all` is already on by default. It implies the following:
 #   * clippy::correctness code that is outright wrong or useless
 #   * clippy::suspicious code that is most likely wrong or useless

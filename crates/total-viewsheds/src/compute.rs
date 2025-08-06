@@ -4,20 +4,31 @@ use color_eyre::Result;
 
 /// Handles all the computations.
 pub struct Compute<'compute> {
+    /// Where to run the kernel computations
+    method: crate::config::ComputeType,
+    /// Output directory
+    output_dir: Option<std::path::PathBuf>,
     /// The Digital Elevation Model that we're computing.
     dem: &'compute mut crate::dem::DEM,
     /// The constants for each kernel computation.
-    pub constants: crate::kernel::Constants,
+    pub constants: total_viewsheds_kernel::kernel::Constants,
     /// The amount of reserved memory for ring data.
     reserved_rings: usize,
+    /// Keeps track of the cumulative surfaces from every angle.
+    pub total_surfaces: Vec<f32>,
 }
 
 impl<'compute> Compute<'compute> {
     /// Instantiate.
-    pub fn new(dem: &'compute mut crate::dem::DEM, rings_per_km: f32) -> Result<Self> {
+    pub fn new(
+        method: crate::config::ComputeType,
+        output_dir: Option<std::path::PathBuf>,
+        dem: &'compute mut crate::dem::DEM,
+        rings_per_km: f32,
+    ) -> Result<Self> {
         let total_bands = dem.computable_points_count * 2;
         let rings_per_band = Self::ring_count_per_band(rings_per_km, dem.max_line_of_sight);
-        let constants = crate::kernel::Constants {
+        let constants = total_viewsheds_kernel::kernel::Constants {
             total_bands,
             max_los_as_points: dem.max_los_as_points,
             dem_width: dem.width,
@@ -29,9 +40,12 @@ impl<'compute> Compute<'compute> {
         let total_reserved_rings = usize::try_from(total_bands)? * rings_per_band;
 
         Ok(Self {
+            method,
+            output_dir,
             dem,
             constants,
             reserved_rings: total_reserved_rings,
+            total_surfaces: Vec::default(),
         })
     }
 
@@ -52,14 +66,33 @@ impl<'compute> Compute<'compute> {
     /// Do all computations.
     pub fn run(&mut self) -> Result<(Vec<f32>, Vec<Vec<u32>>)> {
         let mut cumulative_surfaces = vec![0.0; usize::try_from(self.dem.computable_points_count)?];
+        self.total_surfaces.clone_from(&cumulative_surfaces);
         let mut all_ring_data = Vec::new();
         for angle in 0..180 {
             let mut sector_ring_data = vec![0; self.reserved_rings];
             self.compute_sector(angle, &mut cumulative_surfaces, &mut sector_ring_data)?;
             all_ring_data.push(sector_ring_data.clone());
+            self.render_total_surfaces()?;
         }
 
         Ok((cumulative_surfaces, all_ring_data))
+    }
+
+    /// Render a heatmap of the total surface areas of each point within the computable area of the
+    /// DEM.
+    fn render_total_surfaces(&self) -> Result<()> {
+        let Some(output_dir) = &self.output_dir else {
+            return Ok(());
+        };
+
+        crate::output::png::save(
+            &self.total_surfaces,
+            self.dem.tvs_width,
+            self.dem.tvs_width,
+            output_dir.join("heatmap.png"),
+        )?;
+
+        Ok(())
     }
 
     /// Compute a single sector.
@@ -76,8 +109,49 @@ impl<'compute> Compute<'compute> {
         self.dem.compile_band_data()?;
 
         tracing::debug!("Running kernel for {angle}°");
+        match self.method {
+            crate::config::ComputeType::CPU => {
+                self.compute_sector_cpu(cumulative_surfaces, ring_data)?;
+            }
+            crate::config::ComputeType::Vulkan => {
+                self.compute_sector_vulkan(cumulative_surfaces)?;
+            }
+
+            #[expect(clippy::unimplemented, reason = "Coming Soon!")]
+            crate::config::ComputeType::Cuda => unimplemented!(),
+        }
+
+        self.add_sector_surfaces_to_running_total(cumulative_surfaces);
+
+        Ok(())
+    }
+
+    /// Add the accumulated total surface areas for the current sector to the running total.
+    fn add_sector_surfaces_to_running_total(&mut self, cumulative_surfaces: &[f32]) {
+        for (left, right) in self
+            .total_surfaces
+            .iter_mut()
+            .zip(cumulative_surfaces.iter())
+        {
+            *left += right;
+        }
+    }
+
+    /// Do a whole sector calculation on the GPU using Vulkan.
+    fn compute_sector_vulkan(&self, cumulative_surfaces: &mut [f32]) -> Result<()> {
+        let result = crate::gpu::run(self.constants, self.dem, self.reserved_rings)?;
+        cumulative_surfaces.copy_from_slice(result.as_slice());
+        Ok(())
+    }
+
+    /// Do a whole sector calculation on the CPU.
+    fn compute_sector_cpu(
+        &self,
+        cumulative_surfaces: &mut [f32],
+        ring_data: &mut [u32],
+    ) -> Result<()> {
         for kernel_id in 0..self.constants.total_bands {
-            crate::kernel::kernel(
+            total_viewsheds_kernel::kernel::kernel(
                 kernel_id,
                 &self.constants,
                 &self.dem.elevations,
@@ -103,7 +177,7 @@ mod test {
 
     fn compute_tvs(dem: &mut crate::dem::DEM, elevations: &[i16]) -> (Vec<f32>, Vec<Vec<u32>>) {
         dem.elevations = elevations.iter().map(|&x| f32::from(x)).collect();
-        let mut compute = Compute::new(dem, 5000.0).unwrap();
+        let mut compute = Compute::new(crate::config::ComputeType::CPU, None, dem, 5000.0).unwrap();
         compute.run().unwrap()
     }
 

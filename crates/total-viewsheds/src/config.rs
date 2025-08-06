@@ -19,7 +19,7 @@ pub struct Config {
     /// value is used to decide how much memory is reserved for collecting ring data. So if it is
     /// too low then the program may panic. If it is too high then performance is lost due to
     /// unused RAM.
-    #[arg(long, value_name = "Expected rings per km", default_value_t = 700.0)]
+    #[arg(long, value_name = "Expected rings per km", default_value_t = 5.0)]
     pub rings_per_km: f32,
     /// The height of the observer in meters.
     #[arg(
@@ -44,4 +44,25 @@ pub struct Config {
         default_value = "0.001"
     )]
     pub sector_shift: f32,
+    /// Where to run the kernel calculations.
+    #[arg(
+        long,
+        value_enum,
+        value_name = "The method of running the kernel",
+        default_value_t = ComputeType::Vulkan
+    )]
+    pub compute: ComputeType,
+    /// Path to save the heatmap of the total viewshed surfaces.
+    #[arg(long, value_name = "Directory to save output to", default_value = "./")]
+    pub output_dir: std::path::PathBuf,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum ComputeType {
+    /// Conventional CPU computations. The slowest method.
+    CPU,
+    /// A SPIRV shader run on the GPU via Vulkan.
+    Vulkan,
+    /// TBC
+    Cuda,
 }
