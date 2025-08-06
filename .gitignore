@@ -19,3 +19,4 @@ vgcore.*
 /dems
 /target
 rustc-ice*
+/heatmap.png

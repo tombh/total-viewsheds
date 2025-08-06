@@ -30,13 +30,29 @@
 
 use color_eyre::Result;
 
+/// The number of steps we sweep through to reach 180°.
+// TODO: make configurable?
+pub const SECTOR_STEPS: u16 = 180;
+
+/// Initial angular shift in sector alignment. This avoids DEM point aligments.
+/// Eg; The first sector without shift looks from A to B, but with shift looks from A to somehwere
+/// between B and C:
+///
+/// A. . . . .B
+///  . . . . .C
+///  . . . . .
+///  . . . . .
+///  . . . . .
+///  
+pub const SECTOR_SHIFT: f32 = 0.001;
+
 /// `Axes`
 #[derive(Default)]
 pub struct Axes {
     /// The width of the DEM.
     width: u32,
     /// The angle for which we are calculating the axes.
-    angle: f32,
+    pub angle: f32,
     /// The distance of each DEM point from the base of the sector angle. Although exactly where
     /// the base line lies is not that important, as long it has the correct angle, then positive
     /// and negative distances relative to it are fine too..
@@ -57,7 +73,7 @@ impl Axes {
         let sector_ordered: Vec<u32> = (0..total_points).collect();
         Ok(Self {
             width,
-            angle: angle + crate::dem::SECTOR_SHIFT,
+            angle: angle + SECTOR_SHIFT,
             distances: Vec::new(),
             sight_ordered_map,
             sector_ordered,

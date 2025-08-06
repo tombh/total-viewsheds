@@ -51,14 +51,16 @@ const DIAGANOL_GREATER_THAN_WIDTH: f64 = core::f64::consts::SQRT_2;
 
 impl crate::dem::DEM {
     /// These deltas apply to *all* possible bands in this sector.
-    pub fn compile_band_data(&self) -> Result<Vec<i32>> {
+    pub fn compile_band_data(&mut self) -> Result<()> {
+        tracing::debug!("Calculating band deltas for {}°", self.axes.angle);
+
         let mut dem_ids_to_compute = Vec::new();
         let mut distance_ids = Vec::new();
 
         // We subtract one because there are always 1 fewer deltas in a set than there are actual
         // items in the set.
         let band_deltas_size = self.band_size - 1;
-        let mut band_deltas = vec![0i32; usize::try_from(band_deltas_size)?];
+        self.band_deltas = vec![0i32; usize::try_from(band_deltas_size)?];
 
         // In order for the line of sight not to "slip through" DEM points because it's too thin,
         // we need to ensure a minimum density of points. I don't think this step is mentioned in
@@ -150,10 +152,10 @@ impl crate::dem::DEM {
             let current = i32::try_from(dem_ids_to_compute[current_sector_id])?;
             let next = i32::try_from(dem_ids_to_compute[distances_to_sector_ids_map[band_id + 1]])?;
             let delta = current - next;
-            band_deltas[i] = delta;
+            self.band_deltas[i] = delta;
         }
 
-        Ok(band_deltas)
+        Ok(())
     }
 }
 
@@ -177,13 +179,13 @@ impl crate::dem::DEM {
 #[cfg(test)]
 mod test {
     /// Reconstruct bands from deltas.
-    fn reconstruct_bands(angle: f32) -> Vec<Vec<u32>> {
+    fn reconstruct_bands(angle: u16) -> Vec<Vec<u32>> {
         let mut dem = crate::dem::DEM::new(9, 1.0, 3).unwrap();
         assert_eq!(dem.computable_points_count, 9);
-        dem.calculate_axes(angle).unwrap();
+        dem.calculate_axes(f32::from(angle)).unwrap();
 
         let mut both_bands = Vec::new();
-        let band_deltas = dem.compile_band_data().unwrap();
+        dem.compile_band_data().unwrap();
 
         for point in 0..dem.computable_points_count {
             let mut front_band = Vec::new();
@@ -192,7 +194,7 @@ mod test {
             let mut back_dem_id = front_dem_id;
             front_band.push(front_dem_id);
             back_band.push(back_dem_id);
-            for delta in &band_deltas {
+            for delta in &dem.band_deltas {
                 front_dem_id = (front_dem_id as i32 + delta) as u32;
                 back_dem_id = (back_dem_id as i32 - delta) as u32;
                 front_band.push(front_dem_id);
@@ -211,7 +213,7 @@ mod test {
 
     #[test]
     fn sector_at_0_degrees() {
-        let bands = reconstruct_bands(0.0);
+        let bands = reconstruct_bands(0);
         #[rustfmt::skip]
         assert_eq!(
             bands,
@@ -231,7 +233,7 @@ mod test {
 
     #[test]
     fn sector_at_15_degrees() {
-        let bands = reconstruct_bands(15.0);
+        let bands = reconstruct_bands(15);
         #[rustfmt::skip]
         assert_eq!(
             bands,
@@ -250,7 +252,7 @@ mod test {
 
     #[test]
     fn sector_at_90_degrees() {
-        let bands = reconstruct_bands(90.0);
+        let bands = reconstruct_bands(90);
         #[rustfmt::skip]
         assert_eq!(
             bands,
@@ -270,7 +272,7 @@ mod test {
 
     #[test]
     fn sector_at_135_degrees() {
-        let bands = reconstruct_bands(135.0);
+        let bands = reconstruct_bands(135);
         #[rustfmt::skip]
         assert_eq!(
             bands,

@@ -7,21 +7,12 @@
 
 use color_eyre::Result;
 
-/// Initial angular shift in sector alignment. This avoids DEM point aligments.
-/// Eg; The first sector without shift looks from A to B, but with shift looks from A to somehwere
-/// between B and C:
-///
-/// A. . . . .B
-///  . . . . .C
-///  . . . . .
-///  . . . . .
-///  . . . . .
-pub const SECTOR_SHIFT: f32 = 0.001;
-
 /// `DEM`
 pub struct DEM {
     /// Trigonomic data about the points when you rotate the DEM through certain angles.
     pub axes: crate::axes::Axes,
+    /// The band deltas for the current sector.
+    pub band_deltas: Vec<i32>,
     /// All the elevation data.
     pub elevations: Vec<f32>,
     /// The width of the DEM.
@@ -70,6 +61,7 @@ impl DEM {
 
         let mut dem = Self {
             axes: crate::axes::Axes::default(),
+            band_deltas: Vec::default(),
             elevations: Vec::default(),
             width,
             tvs_width: 0,
