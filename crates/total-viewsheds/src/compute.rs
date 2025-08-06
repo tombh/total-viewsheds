@@ -6,6 +6,8 @@ use color_eyre::Result;
 pub struct Compute<'compute> {
     /// Where to run the kernel computations
     method: crate::config::ComputeType,
+    /// The GPU manager
+    gpu: Option<super::gpu::GPU>,
     /// The OS's state directory for saving our cache into.
     state_directory: Option<std::path::PathBuf>,
     /// Output directory
@@ -42,8 +44,19 @@ impl<'compute> Compute<'compute> {
 
         let total_reserved_rings = usize::try_from(total_bands)? * rings_per_band;
 
+        #[expect(
+            clippy::if_then_some_else_none,
+            reason = "The `?` is hard to use in the closure"
+        )]
+        let gpu = if matches!(method, crate::config::ComputeType::Vulkan) {
+            Some(super::gpu::GPU::new()?)
+        } else {
+            None
+        };
+
         Ok(Self {
             method,
+            gpu,
             state_directory,
             output_dir,
             dem,
@@ -100,6 +113,11 @@ impl<'compute> Compute<'compute> {
             cache.ensure_directories_exists()?;
 
             if cache.is_cache_exists {
+                tracing::debug!(
+                    "Loading cache from: {}/*/{}",
+                    cache.base_directory.display(),
+                    angle
+                );
                 self.dem.band_deltas = cache.load_band_deltas()?;
                 self.dem.axes.distances = cache.load_distances()?;
                 return Ok(());
@@ -180,7 +198,11 @@ impl<'compute> Compute<'compute> {
 
     /// Do a whole sector calculation on the GPU using Vulkan.
     fn compute_sector_vulkan(&self, cumulative_surfaces: &mut [f32]) -> Result<()> {
-        let result = crate::gpu::run(
+        let Some(gpu) = &self.gpu else {
+            color_eyre::eyre::bail!("");
+        };
+
+        let result = gpu.run(
             self.constants,
             &self.dem.elevations,
             &self.dem.axes.distances,
