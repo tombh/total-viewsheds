@@ -1,0 +1,34 @@
+[package]
+name = "total-viewsheds-kernel"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["dylib", "lib"]
+
+[dependencies]
+spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu", rev = "86fc48032c4cd4afb74f1d81ae859711d20386a1" }
+
+# Dependencies for GPU code
+[target.'cfg(target_arch = "spirv")'.dependencies]
+glam = { version = "0.29", default-features = false, features = ["libm"] }
+
+# Dependencies for CPU code
+[target.'cfg(not(target_arch = "spirv"))'.dependencies]
+glam = { version = "0.29", features = ["std"] }
+bytemuck = "1.22.0"
+
+[package.metadata.rust-gpu.build]
+# Where to output the compiled shader. Defaults to where `cargo gpu` is called from.
+# TODO: Should it default to the root of the shader crate?
+output-dir = "./"
+# Set shader crate's cargo default-features
+default_features = true
+# Set shader crate's cargo features.
+features = []
+# We don't want the manifest.json so hide it in an ignored path
+manifest-file = "../../target/shader-manifest.json"
+
+[lints]
+workspace = true
+
