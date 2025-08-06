@@ -6,6 +6,8 @@ use color_eyre::Result;
 pub struct Compute<'compute> {
     /// Where to run the kernel computations
     method: crate::config::ComputeType,
+    /// The OS's state directory for saving our cache into.
+    state_directory: Option<std::path::PathBuf>,
     /// Output directory
     output_dir: Option<std::path::PathBuf>,
     /// The Digital Elevation Model that we're computing.
@@ -22,6 +24,7 @@ impl<'compute> Compute<'compute> {
     /// Instantiate.
     pub fn new(
         method: crate::config::ComputeType,
+        state_directory: Option<std::path::PathBuf>,
         output_dir: Option<std::path::PathBuf>,
         dem: &'compute mut crate::dem::DEM,
         rings_per_km: f32,
@@ -41,6 +44,7 @@ impl<'compute> Compute<'compute> {
 
         Ok(Self {
             method,
+            state_directory,
             output_dir,
             dem,
             constants,
@@ -63,12 +67,14 @@ impl<'compute> Compute<'compute> {
         (band_length_in_km * rings_per_km) as usize
     }
 
-    /// Do all computations.
+    /// Do alld computations.
     pub fn run(&mut self) -> Result<(Vec<f32>, Vec<Vec<u32>>)> {
         let mut cumulative_surfaces = vec![0.0; usize::try_from(self.dem.computable_points_count)?];
         self.total_surfaces.clone_from(&cumulative_surfaces);
         let mut all_ring_data = Vec::new();
-        for angle in 0..180 {
+
+        for angle in 0..crate::axes::SECTOR_STEPS {
+            self.load_or_compute_cache(angle)?;
             let mut sector_ring_data = vec![0; self.reserved_rings];
             self.compute_sector(angle, &mut cumulative_surfaces, &mut sector_ring_data)?;
             all_ring_data.push(sector_ring_data.clone());
@@ -76,6 +82,47 @@ impl<'compute> Compute<'compute> {
         }
 
         Ok((cumulative_surfaces, all_ring_data))
+    }
+
+    /// Either load cache from the filesystem or create and save it.
+    fn load_or_compute_cache(&mut self, angle: u16) -> Result<()> {
+        let maybe_cache = if let Some(state_directory) = self.state_directory.clone() {
+            Some(crate::cache::Cache::new(
+                &state_directory,
+                self.dem.width,
+                angle,
+            ))
+        } else {
+            None
+        };
+
+        if let Some(cache) = &maybe_cache {
+            cache.ensure_directories_exists()?;
+
+            if cache.is_cache_exists {
+                self.dem.band_deltas = cache.load_band_deltas()?;
+                self.dem.axes.distances = cache.load_distances()?;
+                return Ok(());
+            }
+
+            tracing::warn!(
+                "Cached data not found at: {}/*/{}. So computing now...",
+                cache.base_directory.display(),
+                angle
+            );
+        } else {
+            tracing::warn!("Forcing computation of cache for angle {angle}°...");
+        }
+
+        self.dem.calculate_axes(f32::from(angle))?;
+        self.dem.compile_band_data()?;
+
+        if let Some(cache) = &maybe_cache {
+            cache.save_band_deltas(&self.dem.band_deltas)?;
+            cache.save_distances(&self.dem.axes.distances)?;
+        }
+
+        Ok(())
     }
 
     /// Render a heatmap of the total surface areas of each point within the computable area of the
@@ -98,20 +145,14 @@ impl<'compute> Compute<'compute> {
     /// Compute a single sector.
     fn compute_sector(
         &mut self,
-        angle: u8,
+        angle: u16,
         cumulative_surfaces: &mut [f32],
         ring_data: &mut [u32],
     ) -> Result<()> {
-        tracing::debug!("Calculating bands for sector: {angle}°");
-        self.dem.calculate_axes(f32::from(angle))?;
-
-        tracing::debug!("Calculating band deltas for {angle}°");
-        self.dem.compile_band_data()?;
-
-        tracing::debug!("Running kernel for {angle}°");
+        tracing::info!("Running kernel for {angle}°");
         match self.method {
             crate::config::ComputeType::CPU => {
-                self.compute_sector_cpu(cumulative_surfaces, ring_data)?;
+                self.compute_sector_cpu(&self.dem.band_deltas, cumulative_surfaces, ring_data);
             }
             crate::config::ComputeType::Vulkan => {
                 self.compute_sector_vulkan(cumulative_surfaces)?;
@@ -139,7 +180,13 @@ impl<'compute> Compute<'compute> {
 
     /// Do a whole sector calculation on the GPU using Vulkan.
     fn compute_sector_vulkan(&self, cumulative_surfaces: &mut [f32]) -> Result<()> {
-        let result = crate::gpu::run(self.constants, self.dem, self.reserved_rings)?;
+        let result = crate::gpu::run(
+            self.constants,
+            &self.dem.elevations,
+            &self.dem.axes.distances,
+            &self.dem.band_deltas,
+            self.reserved_rings,
+        )?;
         cumulative_surfaces.copy_from_slice(result.as_slice());
         Ok(())
     }
@@ -147,22 +194,21 @@ impl<'compute> Compute<'compute> {
     /// Do a whole sector calculation on the CPU.
     fn compute_sector_cpu(
         &self,
+        band_deltas: &[i32],
         cumulative_surfaces: &mut [f32],
         ring_data: &mut [u32],
-    ) -> Result<()> {
+    ) {
         for kernel_id in 0..self.constants.total_bands {
             total_viewsheds_kernel::kernel::kernel(
                 kernel_id,
                 &self.constants,
                 &self.dem.elevations,
                 &self.dem.axes.distances,
-                &self.dem.compile_band_data()?,
+                band_deltas,
                 cumulative_surfaces,
                 ring_data,
             );
         }
-
-        Ok(())
     }
 }
 
@@ -177,7 +223,8 @@ mod test {
 
     fn compute_tvs(dem: &mut crate::dem::DEM, elevations: &[i16]) -> (Vec<f32>, Vec<Vec<u32>>) {
         dem.elevations = elevations.iter().map(|&x| f32::from(x)).collect();
-        let mut compute = Compute::new(crate::config::ComputeType::CPU, None, dem, 5000.0).unwrap();
+        let mut compute =
+            Compute::new(crate::config::ComputeType::CPU, None, None, dem, 5000.0).unwrap();
         compute.run().unwrap()
     }
 

@@ -5,6 +5,10 @@ Calculates the total visible surface from every point of a given terrain. For ex
 
 This is an example of a single viewshed from the summit of Mt. Diablo in California. It was created by another viewshed tool called [Caltopo](https://caltopo.com).
 
+![A total viewshed placed over the DEM file from which it was created](tvs_on_hgt.jpg)
+
+This is an example of a heatmap of a total viewshed surface area (the darker square in the middle). Notice how its features are similar but different to the underlying elevation data. It still represents peaks and valleys, but for example, its northern side is brighter because it can see further into the lower regions of the northern part of underlying elevation data. The heatmap is smaller because it doesn't calculate values at the edges of the elevation data, it can't calculate the visibility of regions it is not given data for.
+
 ## Algorithm
 This project is based on the work of Siham Tabik, Antonio R. Cervilla, Emilio Zapata, Luis F. Romero in their
 paper _Efficient Data Structure and Highly Scalable Algorithm for Total-Viewshed Computation_: https://ieeexplore.ieee.org/document/6837455
@@ -20,6 +24,8 @@ You will need a `.hgt` file. They can be downloaded in zip batches from: https:/
 Example: `RUST_LOG=debug cargo run -- --input N51W002.hgt`
 
 A heatmap of total viewshed surface areas will be saved to `./heatmap.png`. The path can be changed with `--output-dir path/to/dir`. Note that the same image file is updated for every sector angle, so you can watch the details improve as the computatioin progresses.
+
+The heatmap is generally only of the central third of the input file. You can see an elevation heatmap of the original here: https://dwtkns.com/srtm30m, you should be able match features from its central area.
 
 ```
 Usage: total-viewsheds [OPTIONS] --input <Path to the DEM file>
@@ -100,9 +106,6 @@ https://calgaryvisioncentre.com/news/2017/6/23/tdgft1bsbdlm8496ov7tn73kr0ci1q
 * https://en.wikipedia.org/wiki/Long_distance_observations
 
 ## TODO
-* [ ] Run the kernel on the GPU with `wgpu` and `rust-gpu`/`rust-cuda`.
-* [ ] `.png` output to show total viewshed surface area heatmap.
-* [ ] Cache pre-computations to disk.
 * [ ] Why is computing 0° so much faster than computing 1° and 45° so much faster than 46°??
 * [ ] `--rings-per-km` doesn't seem intuitive and doesn't give an informative error when it fails.
 

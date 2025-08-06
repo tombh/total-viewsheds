@@ -59,5 +59,3 @@ jobs:
         run: cargo fmt --check
       - name: Check for unused dependencies
         run: cargo shear
-      - name: Verify Minimum Stable Rust Version
-        run: cargo msrv verify

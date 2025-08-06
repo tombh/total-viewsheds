@@ -6,9 +6,12 @@ use color_eyre::Result;
 
 #[expect(clippy::too_many_lines, reason = "")]
 /// Compute a single sector.
+// TODO: Don't recreate the entire pipeline for every sector.
 pub fn run(
     constants: total_viewsheds_kernel::kernel::Constants,
-    dem: &crate::dem::DEM,
+    elevations: &[f32],
+    distances: &[f32],
+    band_deltas: &[i32],
     reserved_rings: usize,
 ) -> Result<Vec<f32>> {
     // We first initialize an wgpu `Instance`, which contains any "global" state wgpu needs.
@@ -71,26 +74,26 @@ pub fn run(
     // All the elevation data.
     let input_elevations_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
-        contents: bytemuck::cast_slice(&dem.elevations),
+        contents: bytemuck::cast_slice(elevations),
         usage: wgpu::BufferUsages::STORAGE,
     });
 
     // All the distance data.
     let input_distances_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
-        contents: bytemuck::cast_slice(&dem.axes.distances),
+        contents: bytemuck::cast_slice(distances),
         usage: wgpu::BufferUsages::STORAGE,
     });
 
     // All the deltas data.
     let input_deltas_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: None,
-        contents: bytemuck::cast_slice(&dem.compile_band_data()?),
+        contents: bytemuck::cast_slice(band_deltas),
         usage: wgpu::BufferUsages::STORAGE,
     });
 
     let output_surfaces_size =
-        u64::from(dem.computable_points_count) * u64::try_from(std::mem::size_of::<f32>())?;
+        u64::from(constants.total_bands.div_euclid(2)) * u64::try_from(std::mem::size_of::<f32>())?;
     let output_surfaces_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size: output_surfaces_size,

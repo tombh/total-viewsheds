@@ -1,11 +1,12 @@
 //! Total Viewshed Calculator
 
 use clap::Parser as _;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{ContextCompat as _, Result};
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _, Layer as _};
 
 mod axes;
 mod band_of_sight;
+mod cache;
 mod compute;
 mod config;
 mod dem;
@@ -56,6 +57,7 @@ fn main() -> Result<()> {
     tracing::info!("Starting computations");
     let mut compute = crate::compute::Compute::new(
         config.compute,
+        Some(dirs::state_dir().context("Couldn't get the OS's state directory")?),
         Some(config.output_dir),
         &mut dem,
         config.rings_per_km,
