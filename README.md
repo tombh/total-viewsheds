@@ -108,4 +108,5 @@ https://calgaryvisioncentre.com/news/2017/6/23/tdgft1bsbdlm8496ov7tn73kr0ci1q
 ## TODO
 * [ ] Why is computing 0° so much faster than computing 1° and 45° so much faster than 46°??
 * [ ] `--rings-per-km` doesn't seem intuitive and doesn't give an informative error when it fails.
+* [ ] SRTM files have a resolution in _degrees_ not metres. We have to accomodate that.
 

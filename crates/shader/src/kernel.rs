@@ -47,7 +47,7 @@ pub struct Constants {
     /// The height of the observer in meters.
     pub observer_height: f32,
     /// The amount of memory reserved for storing computed ring sectors.
-    pub reserved_rings: u32,
+    pub reserved_rings_per_band: u32,
     /// Padding.
     pub _pad0: u32,
     /// Padding.
@@ -110,7 +110,7 @@ pub fn kernel(
     // sectors found.
     let mut ring_id = 1;
 
-    // Translate a kernel ID  to a TVS ID
+    // Translate a kernel ID to a TVS ID
     let band_direction = if kernel_id < half_total_bands {
         tvs_id = kernel_id;
         BandDirection::Forward
@@ -136,7 +136,7 @@ pub fn kernel(
         reason = "This needs to run on the GPU where fallibility isn't possible"
     )]
     // This thread needs its own unshared space in global memory.
-    let ring_data_start = (kernel_id * constants.reserved_rings) as usize;
+    let ring_data_start = (kernel_id * constants.reserved_rings_per_band) as usize;
 
     // We already know that the first point from the PoV is always visible and
     // is therefore the opening of a visible region.
@@ -148,8 +148,6 @@ pub fn kernel(
     let mut dem_id = pov_id;
 
     // The kernel's kernel. The most critical code of all.
-    // Passing the band size as a compiler argument allows for optimisation through
-    // loop unrolling.
     for index in 0..deltas.len() {
         let delta = deltas[index];
 
