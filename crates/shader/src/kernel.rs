@@ -3,6 +3,9 @@
     clippy::indexing_slicing,
     reason = "This needs to be able to run on the GPU"
 )]
+// You can use this for debugging when running with `--compute cpu`
+// #[cfg(not(target_arch = "spirv"))]
+// dbg!(distance);
 
 //! Viewshed kernel. The heart of the calculations.
 
@@ -75,7 +78,7 @@ pub fn kernel(
     constants: &Constants,
     // Every single DEM point's elevation.
     elevations: &[f32],
-    // Every single DEM point's distance from the sector-orthogonal axis.
+    // All the required distances for the band. All bands share the same values.
     distances: &[f32],
     // Deltas used to build a band. Deltas are always the same for both front and back bands.
     //
@@ -129,7 +132,6 @@ pub fn kernel(
 
     // The PoV is involved in every calculation, so do now and save for later.
     let pov_elevation = elevations[pov_id] + constants.observer_height;
-    let pov_distance = distances[pov_id];
 
     #[expect(
         clippy::as_conversions,
@@ -148,8 +150,8 @@ pub fn kernel(
     let mut dem_id = pov_id;
 
     // The kernel's kernel. The most critical code of all.
-    for index in 0..deltas.len() {
-        let delta = deltas[index];
+    for band_index in 0..deltas.len() {
+        let delta = deltas[band_index];
 
         // Derive the new DEM ID.
         dem_id = match band_direction {
@@ -160,7 +162,7 @@ pub fn kernel(
         // Pull the actual data needed to make a visibility calculation from global memory.
         // TODO: does getting these all at once before the loop give a speed up?
         let elevation_delta = elevations[dem_id] - pov_elevation;
-        let distance_delta = (distances[dem_id] - pov_distance).abs();
+        let distance = distances[band_index];
 
         // The actual visibility calculation.
         // Note the adjustment for curvature of the earth. It is merely a crude
@@ -170,7 +172,7 @@ pub fn kernel(
         //   * Is there a performance gain to be had from only checking for an
         //     increase in elevation as a trigger for the full angle calculation?
         //   * Is this safe for `f32`? At what point does it break down?
-        let angle = (elevation_delta / distance_delta) - (distance_delta / EARTH_RADIUS_SQUARED);
+        let angle = (elevation_delta / distance) - (distance / EARTH_RADIUS_SQUARED);
 
         //                            5              |-
         //                        4 .-`-. 6          |-
@@ -211,7 +213,7 @@ pub fn kernel(
             //
             // TODO: Can this be refactored into a single calculation at the closing
             //       of a ring sector?
-            band_surface += distance_delta * TAN_ONE_RAD;
+            band_surface += distance * TAN_ONE_RAD;
         }
 
         // Store the position on the DEM where the visible region starts.

@@ -65,6 +65,7 @@ impl crate::dem::DEM {
         let mut distance_ids = Vec::new();
 
         self.band_deltas = vec![0i32; usize::try_from(self.band_deltas_size())?];
+        self.band_distances = vec![0f32; usize::try_from(self.band_deltas_size())?];
 
         // In order for the line of sight not to "slip through" DEM points because it's too thin,
         // we need to ensure a minimum density of points. I don't think this step is mentioned in
@@ -147,16 +148,27 @@ impl crate::dem::DEM {
         // to the final point in the band.
         let middle_of_whole_band = band_samples.div_euclid(2);
         let end_of_band = usize::try_from(self.band_size * 2)?;
+
         #[expect(
             clippy::indexing_slicing,
             reason = "It's easier to read and panicking is appropriate as there's no way to recover"
         )]
-        for (i, band_id) in (middle_of_whole_band..end_of_band).enumerate() {
-            let current_sector_id = distances_to_sector_ids_map[band_id];
-            let current = i32::try_from(dem_ids_to_compute[current_sector_id])?;
-            let next = i32::try_from(dem_ids_to_compute[distances_to_sector_ids_map[band_id + 1]])?;
-            let delta = current - next;
-            self.band_deltas[i] = delta;
+        {
+            let pov_sector_id = distances_to_sector_ids_map[middle_of_whole_band];
+            let pov_dem_id = i32::try_from(dem_ids_to_compute[pov_sector_id])?;
+            let pov_distance = self.axes.distances[usize::try_from(pov_dem_id)?];
+            for (i, band_id) in (middle_of_whole_band..end_of_band).enumerate() {
+                let current_sector_id = distances_to_sector_ids_map[band_id];
+                let current_dem_id = i32::try_from(dem_ids_to_compute[current_sector_id])?;
+                let next_dem_id =
+                    i32::try_from(dem_ids_to_compute[distances_to_sector_ids_map[band_id + 1]])?;
+
+                let delta = current_dem_id - next_dem_id;
+                self.band_deltas[i] = delta;
+
+                let next_distance = self.axes.distances[usize::try_from(next_dem_id)?];
+                self.band_distances[i] = (pov_distance - next_distance).abs();
+            }
         }
 
         Ok(())
@@ -178,12 +190,14 @@ impl crate::dem::DEM {
     clippy::as_conversions,
     clippy::cast_sign_loss,
     clippy::cast_possible_wrap,
+    clippy::unreadable_literal,
+    clippy::approx_constant,
     reason = "Test input is known"
 )]
 #[cfg(test)]
 mod test {
     /// Reconstruct bands from deltas.
-    fn reconstruct_bands(angle: u16) -> Vec<Vec<u32>> {
+    fn reconstruct_bands(angle: u16) -> (Vec<Vec<u32>>, Vec<f32>) {
         let mut dem = crate::dem::DEM::new(9, 1.0, 3).unwrap();
         assert_eq!(dem.computable_points_count, 9);
         dem.calculate_axes(f32::from(angle)).unwrap();
@@ -212,12 +226,12 @@ mod test {
             both_bands.push(front_band.clone());
         }
 
-        both_bands
+        (both_bands, dem.band_distances)
     }
 
     #[test]
     fn sector_at_0_degrees() {
-        let bands = reconstruct_bands(0);
+        let (bands, distances) = reconstruct_bands(0);
         #[rustfmt::skip]
         assert_eq!(
             bands,
@@ -233,11 +247,13 @@ mod test {
                 [77, 68, 59, 50], [50, 41, 32, 23]
             ]
         );
+
+        assert_eq!(distances, [1.0, 2.0, 3.0]);
     }
 
     #[test]
     fn sector_at_15_degrees() {
-        let bands = reconstruct_bands(15);
+        let (bands, distances) = reconstruct_bands(15);
         #[rustfmt::skip]
         assert_eq!(
             bands,
@@ -252,11 +268,13 @@ mod test {
                 [68, 67, 58, 49], [49, 40, 31, 30],
                 [69, 68, 59, 50], [50, 41, 32, 31]]
         );
+
+        assert_eq!(distances, [0.9659214, 1.9318428, 2.1906786]);
     }
 
     #[test]
     fn sector_at_90_degrees() {
-        let bands = reconstruct_bands(90);
+        let (bands, distances) = reconstruct_bands(90);
         #[rustfmt::skip]
         assert_eq!(
             bands,
@@ -272,11 +290,13 @@ mod test {
                 [53, 52, 51, 50], [50, 49, 48, 47]
             ]
         );
+
+        assert_eq!(distances, [1.0000002, 2.0000002, 3.0000002]);
     }
 
     #[test]
     fn sector_at_135_degrees() {
-        let bands = reconstruct_bands(135);
+        let (bands, distances) = reconstruct_bands(135);
         #[rustfmt::skip]
         assert_eq!(
             bands,
@@ -292,5 +312,7 @@ mod test {
                 [26, 34, 42, 50], [50, 58, 66, 74]
             ]
         );
+
+        assert_eq!(distances, [1.4142135, 2.828427, 4.242641]);
     }
 }

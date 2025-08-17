@@ -126,7 +126,7 @@ impl<'compute> Compute<'compute> {
                     angle
                 );
                 self.dem.band_deltas = cache.load_band_deltas()?;
-                self.dem.axes.distances = cache.load_distances()?;
+                self.dem.band_distances = cache.load_distances()?;
                 return Ok(());
             }
 
@@ -144,7 +144,7 @@ impl<'compute> Compute<'compute> {
 
         if let Some(cache) = &maybe_cache {
             cache.save_band_deltas(&self.dem.band_deltas)?;
-            cache.save_distances(&self.dem.axes.distances)?;
+            cache.save_distances(&self.dem.band_distances)?;
         }
 
         Ok(())
@@ -177,7 +177,7 @@ impl<'compute> Compute<'compute> {
         tracing::info!("Running kernel for {angle}°");
         match self.method {
             crate::config::ComputeType::CPU => {
-                self.compute_sector_cpu(&self.dem.band_deltas, cumulative_surfaces, ring_data);
+                self.compute_sector_cpu(cumulative_surfaces, ring_data);
             }
             crate::config::ComputeType::Vulkan => {
                 self.compute_sector_vulkan(cumulative_surfaces)?;
@@ -206,28 +206,23 @@ impl<'compute> Compute<'compute> {
     /// Do a whole sector calculation on the GPU using Vulkan.
     fn compute_sector_vulkan(&mut self, cumulative_surfaces: &mut [f32]) -> Result<()> {
         let Some(gpu) = self.gpu.as_mut() else {
-            color_eyre::eyre::bail!("");
+            color_eyre::eyre::bail!("`self.gpu` not instantiated yet.");
         };
 
-        let result = gpu.run(&self.dem.axes.distances, &self.dem.band_deltas)?;
+        let result = gpu.run(&self.dem.band_distances, &self.dem.band_deltas)?;
         cumulative_surfaces.copy_from_slice(result.as_slice());
         Ok(())
     }
 
     /// Do a whole sector calculation on the CPU.
-    fn compute_sector_cpu(
-        &self,
-        band_deltas: &[i32],
-        cumulative_surfaces: &mut [f32],
-        ring_data: &mut [u32],
-    ) {
+    fn compute_sector_cpu(&self, cumulative_surfaces: &mut [f32], ring_data: &mut [u32]) {
         for kernel_id in 0..self.constants.total_bands {
             total_viewsheds_kernel::kernel::kernel(
                 kernel_id,
                 &self.constants,
                 &self.dem.elevations,
-                &self.dem.axes.distances,
-                band_deltas,
+                &self.dem.band_distances,
+                &self.dem.band_deltas,
                 cumulative_surfaces,
                 ring_data,
             );
@@ -305,9 +300,9 @@ mod test {
         assert_eq!(
             cumulative_surfaces,
             [
-                28.951092, 18.20732, 28.951097,
-                18.207321, 35.32013, 18.207323,
-                28.951097, 18.207317, 28.951092
+                28.95109,  18.207317, 28.951097,
+                18.207323, 35.32013,  18.207323,
+                28.951097, 18.207315, 28.95109
             ]
         );
     }
@@ -319,9 +314,9 @@ mod test {
         assert_eq!(
             cumulative_surfaces,
             [
-                30.305563, 27.532042, 27.445095,
-                27.366535, 35.86692, 24.969402,
-                27.101336, 24.08531, 22.368183
+                30.305561, 27.532038, 27.445093,
+                27.366535, 35.86692,  24.969402,
+                27.101337, 24.085308, 22.368181
             ]
         );
     }
