@@ -1,10 +1,9 @@
 //! The most intensive code, aka the kernel. We keep it in a seperate crate so that it can be
 //! compiled to shader representations
 
-#![no_std]
+#![cfg_attr(target_arch = "spirv", no_std)]
 #![expect(
     clippy::arithmetic_side_effects,
-    clippy::needless_range_loop,
     reason = "`rust-gpu` is a subset of Rust and has some unique requirements"
 )]
 

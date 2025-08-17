@@ -13,6 +13,8 @@ pub struct DEM {
     pub axes: crate::axes::Axes,
     /// The band deltas for every sector.
     pub band_deltas: Vec<i32>,
+    /// All the distances for the band.
+    pub band_distances: Vec<f32>,
     /// All the elevation data.
     pub elevations: Vec<f32>,
     /// The width of the DEM.
@@ -62,6 +64,7 @@ impl DEM {
         let mut dem = Self {
             axes: crate::axes::Axes::default(),
             band_deltas: Vec::default(),
+            band_distances: Vec::default(),
             elevations: Vec::default(),
             width,
             tvs_width: 0,
