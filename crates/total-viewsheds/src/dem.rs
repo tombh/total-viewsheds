@@ -11,7 +11,7 @@ use color_eyre::Result;
 pub struct DEM {
     /// Trigonomic data about the points when you rotate the DEM through certain angles.
     pub axes: crate::axes::Axes,
-    /// The band deltas for the current sector.
+    /// The band deltas for every sector.
     pub band_deltas: Vec<i32>,
     /// All the elevation data.
     pub elevations: Vec<f32>,

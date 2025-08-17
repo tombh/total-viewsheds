@@ -1,5 +1,4 @@
 //! GPU pipeline for running the kernel with Vulkan.
-use std::num::NonZeroU64;
 use wgpu::util::DeviceExt as _;
 
 use color_eyre::Result;
@@ -16,17 +15,50 @@ pub struct GPU {
     device: wgpu::Device,
     /// The pipeline's command queue.
     queue: wgpu::Queue,
-    /// The compiled SPIRV shader module.
-    module: wgpu::ShaderModule,
     /// Number of times to call each kernel workgroup.
     dispatches: Dimensions,
-    /// The constants to send the GPU kernel.
-    constants: total_viewsheds_kernel::kernel::Constants,
+
+    /// Buffers of data needed for computations.
+    buffers: Buffers,
+    /// How the buffers get passed as arguments to the kernel.
+    bind_group: wgpu::BindGroup,
+
+    /// The GPU pipeline.
+    pipeline: wgpu::ComputePipeline,
+
+    /// Memory size of all the accumulated surface data.
+    output_surfaces_size: u64,
+    /// Memory size of the ring data (raw viewshed data).
+    output_rings_size: u64,
+}
+
+/// All the buffers used in the pipeline.
+struct Buffers {
+    /// The horizontal distance of each DEM point from each other in the sector. So it changes for
+    /// every sector (therefore angle).
+    distances: wgpu::Buffer,
+    /// Deltas that when applied to the indexe IDs in a DEM allow traversing from the point of view
+    /// along the band of sight.
+    band_deltas: wgpu::Buffer,
+    /// GPU-side buffer to save the accumulated visible surface area for a given point.
+    output_surfaces: wgpu::Buffer,
+    /// CPU-side buffer for the above.
+    download_surfaces: wgpu::Buffer,
+    /// GPU-side buffer to store the actual viewshed extent data.
+    output_rings: wgpu::Buffer,
+    /// CPU-side buffer for the above.
+    download_rings: wgpu::Buffer,
 }
 
 impl GPU {
     /// Instantiate.
-    pub fn new(mut constants: total_viewsheds_kernel::kernel::Constants) -> Result<Self> {
+    pub fn new(
+        mut constants: total_viewsheds_kernel::kernel::Constants,
+        elevations: &[f32],
+        distances_count: usize,
+        band_deltas_count: usize,
+        total_reserved_rings: usize,
+    ) -> Result<Self> {
         // We first initialize an wgpu `Instance`, which contains any "global" state wgpu needs.
         //
         // This is what loads the vulkan/dx12/metal/opengl libraries.
@@ -75,10 +107,14 @@ impl GPU {
                 trace: wgpu::Trace::Off,
             }))?;
 
-        // TODO: embed this if we ever make a proper binary release.
-        let module = device.create_shader_module(wgpu::include_spirv!(
-            "../../shader/total_viewsheds_kernel.spv"
-        ));
+        let distances_size =
+            u64::try_from(distances_count)? * u64::try_from(std::mem::size_of::<f32>())?;
+        let band_deltas_size =
+            u64::try_from(band_deltas_count)? * u64::try_from(std::mem::size_of::<i32>())?;
+        let output_surfaces_size = u64::from(constants.total_bands.div_euclid(2))
+            * u64::try_from(std::mem::size_of::<f32>())?;
+        let output_rings_size =
+            u64::try_from(total_reserved_rings)? * u64::try_from(std::mem::size_of::<u32>())?;
 
         let required_invocations = constants.total_bands * 2;
         let (dispatches, invocations) =
@@ -91,191 +127,128 @@ impl GPU {
         ]
         .into();
 
+        let (buffers, bind_group) = Self::setup_buffers(
+            &device,
+            constants,
+            elevations,
+            distances_size,
+            band_deltas_size,
+            output_rings_size,
+        )?;
+
+        // TODO: embed this if we ever make a proper binary release.
+        let module = device.create_shader_module(wgpu::include_spirv!(
+            "../../shader/total_viewsheds_kernel.spv"
+        ));
+
+        // The pipeline layout describes the bind groups that a pipeline expects
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&Self::create_bind_group_layout(&device)?],
+            push_constant_ranges: &[],
+        });
+
+        // The pipeline is the ready-to-go program state for the GPU. It contains the shader modules,
+        // the interfaces (bind group layouts) and the shader entry point.
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            module: &module,
+            entry_point: Some("main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
         let gpu = Self {
             device,
             queue,
-            module,
             dispatches,
-            constants,
+            buffers,
+            bind_group,
+            pipeline,
+            output_surfaces_size,
+            output_rings_size,
         };
         Ok(gpu)
     }
 
-    #[expect(clippy::too_many_lines, reason = "")]
-    /// Compute a single sector.
-    // TODO: Don't recreate buffers and re-upload the distances for every sector angle.
-    pub fn run(
-        &self,
+    /// Setup the buffers.
+    fn setup_buffers(
+        device: &wgpu::Device,
+        constants: total_viewsheds_kernel::kernel::Constants,
         elevations: &[f32],
-        distances: &[f32],
-        band_deltas: &[i32],
-        reserved_rings: usize,
-    ) -> Result<Vec<f32>> {
-        // A buffer for the constants data.
-        //
-        // `create_buffer_init` is a utility provided by `wgpu::util::DeviceExt` which simplifies creating
-        // a buffer with some initial data.
-        let input_constants_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::bytes_of(&self.constants),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
+        distances_size: u64,
+        band_deltas_size: u64,
+        output_rings_size: u64,
+    ) -> Result<(Buffers, wgpu::BindGroup)> {
+        let input_constants_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Constants"),
+            contents: bytemuck::bytes_of(&constants),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
 
         // All the elevation data.
         let input_elevations_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(elevations),
-                    usage: wgpu::BufferUsages::STORAGE,
-                });
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Elevations"),
+                contents: bytemuck::cast_slice(elevations),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
-        // All the distance data.
-        let input_distances_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(distances),
-                    usage: wgpu::BufferUsages::STORAGE,
-                });
+        // A buffer to upload the distance data for each sector.
+        let input_distances_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Distances"),
+            size: distances_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
-        // All the deltas data.
-        let input_deltas_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: None,
-                    contents: bytemuck::cast_slice(band_deltas),
-                    usage: wgpu::BufferUsages::STORAGE,
-                });
+        // A buffer to upload the band deltas for each sector.
+        let input_deltas_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Band deltas"),
+            size: band_deltas_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
-        let output_surfaces_size = u64::from(self.constants.total_bands.div_euclid(2))
+        let output_surfaces_size = u64::from(constants.total_bands.div_euclid(2))
             * u64::try_from(std::mem::size_of::<f32>())?;
-        let output_surfaces_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+        let output_surfaces_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Output accumulated surfaces"),
             size: output_surfaces_size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
-        // Finally we create a buffer which can be read by the CPU. This buffer is how we will read
+
+        // Finally we create buffers which can be read by the CPU. This buffer is how we will read
         // the data. We need to use a separate buffer because we need to have a usage of `MAP_READ`,
         // and that usage can only be used with `COPY_DST`.
-        let download_surfaces_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+        let download_surfaces_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Download surfaces"),
             size: output_surfaces_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
 
-        let output_rings_size =
-            u64::try_from(reserved_rings)? * u64::try_from(std::mem::size_of::<u32>())?;
-        let output_rings_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+        let output_rings_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Output ring data"),
             size: output_rings_size,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
-        // Finally we create a buffer which can be read by the CPU. This buffer is how we will read
-        // the data. We need to use a separate buffer because we need to have a usage of `MAP_READ`,
-        // and that usage can only be used with `COPY_DST`.
-        let download_rings_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
+        let download_rings_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Download ring data"),
             size: output_rings_size,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
 
-        let constants_size =
-            u64::try_from(std::mem::size_of::<total_viewsheds_kernel::kernel::Constants>())?;
-        // A bind group layout describes the types of resources that a bind group can contain. Think
-        // of this like a C-style header declaration, ensuring both the pipeline and bind group agree
-        // on the types of resources.
-        let bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[
-                        // Constants
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                // This is the size of a single element in the buffer.
-                                min_binding_size: NonZeroU64::new(constants_size),
-                                has_dynamic_offset: false,
-                            },
-                            count: None,
-                        },
-                        // Elevations
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                // This is the size of a single element in the buffer.
-                                min_binding_size: NonZeroU64::new(4),
-                                has_dynamic_offset: false,
-                            },
-                            count: None,
-                        },
-                        // Distances
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                // This is the size of a single element in the buffer.
-                                min_binding_size: NonZeroU64::new(4),
-                                has_dynamic_offset: false,
-                            },
-                            count: None,
-                        },
-                        // Deltas
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                // This is the size of a single element in the buffer.
-                                min_binding_size: NonZeroU64::new(4),
-                                has_dynamic_offset: false,
-                            },
-                            count: None,
-                        },
-                        // Output: surface data
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 4,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                // This is the size of a single element in the buffer.
-                                min_binding_size: NonZeroU64::new(4),
-                                has_dynamic_offset: false,
-                            },
-                            count: None,
-                        },
-                        // Output: ring data
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 5,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                // This is the size of a single element in the buffer.
-                                min_binding_size: NonZeroU64::new(4),
-                                has_dynamic_offset: false,
-                            },
-                            count: None,
-                        },
-                    ],
-                });
-
+        let bind_group_layout = Self::create_bind_group_layout(device)?;
         // The bind group contains the actual resources to bind to the pipeline.
         //
         // Even when the buffers are individually dropped, wgpu will keep the bind group and buffers
         // alive until the bind group itself is dropped.
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &bind_group_layout,
             entries: &[
@@ -306,27 +279,114 @@ impl GPU {
             ],
         });
 
-        // The pipeline layout describes the bind groups that a pipeline expects
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let buffers = Buffers {
+            distances: input_distances_buffer,
+            band_deltas: input_deltas_buffer,
+            output_surfaces: output_surfaces_buffer,
+            download_surfaces: download_surfaces_buffer,
+            output_rings: output_rings_buffer,
+            download_rings: download_rings_buffer,
+        };
 
-        // The pipeline is the ready-to-go program state for the GPU. It contains the shader modules,
-        // the interfaces (bind group layouts) and the shader entry point.
-        let pipeline = self
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                module: &self.module,
-                entry_point: Some("main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            });
+        Ok((buffers, bind_group))
+    }
+
+    /// A bind group layout describes the types of resources that a bind group can contain. Think
+    /// of this like a C-style header declaration, ensuring both the pipeline and bind group agree
+    /// on the types of resources.
+    fn create_bind_group_layout(device: &wgpu::Device) -> Result<wgpu::BindGroupLayout> {
+        let constants_size =
+            u64::try_from(std::mem::size_of::<total_viewsheds_kernel::kernel::Constants>())?;
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                // Constants
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        // This is the size of a single element in the buffer.
+                        min_binding_size: std::num::NonZeroU64::new(constants_size),
+                        has_dynamic_offset: false,
+                    },
+                    count: None,
+                },
+                // Elevations
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        // This is the size of a single element in the buffer.
+                        min_binding_size: std::num::NonZeroU64::new(4),
+                        has_dynamic_offset: false,
+                    },
+                    count: None,
+                },
+                // Distances
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        // This is the size of a single element in the buffer.
+                        min_binding_size: std::num::NonZeroU64::new(4),
+                        has_dynamic_offset: false,
+                    },
+                    count: None,
+                },
+                // Deltas
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        // This is the size of a single element in the buffer.
+                        min_binding_size: std::num::NonZeroU64::new(4),
+                        has_dynamic_offset: false,
+                    },
+                    count: None,
+                },
+                // Output: surface data
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        // This is the size of a single element in the buffer.
+                        min_binding_size: std::num::NonZeroU64::new(4),
+                        has_dynamic_offset: false,
+                    },
+                    count: None,
+                },
+                // Output: ring data
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        // This is the size of a single element in the buffer.
+                        min_binding_size: std::num::NonZeroU64::new(4),
+                        has_dynamic_offset: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        Ok(layout)
+    }
+
+    /// Compute a single sector.
+    pub fn run(&self, distances: &[f32], band_deltas: &[i32]) -> Result<Vec<f32>> {
+        self.queue
+            .write_buffer(&self.buffers.distances, 0, bytemuck::cast_slice(distances));
+        self.queue.write_buffer(
+            &self.buffers.band_deltas,
+            0,
+            bytemuck::cast_slice(band_deltas),
+        );
 
         // The command encoder allows us to record commands that we will later submit to the GPU.
         let mut encoder = self
@@ -340,8 +400,8 @@ impl GPU {
             timestamp_writes: None,
         });
 
-        compute_pass.set_pipeline(&pipeline);
-        compute_pass.set_bind_group(0, &bind_group, &[]);
+        compute_pass.set_pipeline(&self.pipeline);
+        compute_pass.set_bind_group(0, &self.bind_group, &[]);
         compute_pass.dispatch_workgroups(self.dispatches.0, self.dispatches.1, self.dispatches.2);
 
         // Now we drop the compute pass, giving us access to the encoder again.
@@ -350,19 +410,19 @@ impl GPU {
         // We add a copy operation to the encoder. This will copy the data from the output buffer on the
         // GPU to the download buffer on the CPU.
         encoder.copy_buffer_to_buffer(
-            &output_surfaces_buffer,
+            &self.buffers.output_surfaces,
             0,
-            &download_surfaces_buffer,
+            &self.buffers.download_surfaces,
             0,
-            output_surfaces_size,
+            self.output_surfaces_size,
         );
 
         encoder.copy_buffer_to_buffer(
-            &output_rings_buffer,
+            &self.buffers.output_rings,
             0,
-            &download_rings_buffer,
+            &self.buffers.download_rings,
             0,
-            output_rings_size,
+            self.output_rings_size,
         );
 
         // We finish the encoder, giving us a fully recorded command buffer.
@@ -380,7 +440,7 @@ impl GPU {
         //
         // Mapping requires that the GPU be finished using the buffer before it resolves, so mapping has a callback
         // to tell you when the mapping is complete.
-        let buffer_slice = download_surfaces_buffer.slice(..);
+        let buffer_slice = self.buffers.download_surfaces.slice(..);
         buffer_slice.map_async(wgpu::MapMode::Read, |_| {
             // In this case we know exactly when the mapping will be finished,
             // so we don't need to do anything in the callback.
@@ -393,9 +453,13 @@ impl GPU {
         // We can now read the data from the buffer.
         let data = buffer_slice.get_mapped_range();
         // Convert the data back to a slice of f32.
-        let result: &[f32] = bytemuck::cast_slice(&data);
+        let result = bytemuck::cast_slice(&data).to_vec();
 
-        Ok(result.to_vec())
+        drop(data);
+
+        self.buffers.download_surfaces.unmap();
+
+        Ok(result)
     }
 
     /// Find a 3D kernel dispatch that balances all dimensions.

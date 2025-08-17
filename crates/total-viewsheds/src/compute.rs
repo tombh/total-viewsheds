@@ -17,7 +17,7 @@ pub struct Compute<'compute> {
     /// The constants for each kernel computation.
     pub constants: total_viewsheds_kernel::kernel::Constants,
     /// The amount of reserved memory for ring data.
-    reserved_rings: usize,
+    total_reserved_rings: usize,
     /// Keeps track of the cumulative surfaces from every angle.
     pub total_surfaces: Vec<f32>,
 }
@@ -39,7 +39,7 @@ impl<'compute> Compute<'compute> {
             dem_width: dem.width,
             tvs_width: dem.tvs_width,
             observer_height: 1.8,
-            reserved_rings: u32::try_from(rings_per_band)?,
+            reserved_rings_per_band: u32::try_from(rings_per_band)?,
             ..Default::default()
         };
 
@@ -50,7 +50,13 @@ impl<'compute> Compute<'compute> {
             reason = "The `?` is hard to use in the closure"
         )]
         let gpu = if matches!(method, crate::config::ComputeType::Vulkan) {
-            Some(super::gpu::GPU::new(constants)?)
+            Some(super::gpu::GPU::new(
+                constants,
+                &dem.elevations,
+                usize::try_from(dem.size)?,
+                usize::try_from(dem.band_deltas_size())?,
+                total_reserved_rings,
+            )?)
         } else {
             None
         };
@@ -62,7 +68,7 @@ impl<'compute> Compute<'compute> {
             output_dir,
             dem,
             constants,
-            reserved_rings: total_reserved_rings,
+            total_reserved_rings,
             total_surfaces: Vec::default(),
         })
     }
@@ -89,7 +95,7 @@ impl<'compute> Compute<'compute> {
 
         for angle in 0..crate::axes::SECTOR_STEPS {
             self.load_or_compute_cache(angle)?;
-            let mut sector_ring_data = vec![0; self.reserved_rings];
+            let mut sector_ring_data = vec![0; self.total_reserved_rings];
             self.compute_sector(angle, &mut cumulative_surfaces, &mut sector_ring_data)?;
             all_ring_data.push(sector_ring_data.clone());
             self.render_total_surfaces()?;
@@ -198,17 +204,12 @@ impl<'compute> Compute<'compute> {
     }
 
     /// Do a whole sector calculation on the GPU using Vulkan.
-    fn compute_sector_vulkan(&self, cumulative_surfaces: &mut [f32]) -> Result<()> {
-        let Some(gpu) = &self.gpu else {
+    fn compute_sector_vulkan(&mut self, cumulative_surfaces: &mut [f32]) -> Result<()> {
+        let Some(gpu) = self.gpu.as_mut() else {
             color_eyre::eyre::bail!("");
         };
 
-        let result = gpu.run(
-            &self.dem.elevations,
-            &self.dem.axes.distances,
-            &self.dem.band_deltas,
-            self.reserved_rings,
-        )?;
+        let result = gpu.run(&self.dem.axes.distances, &self.dem.band_deltas)?;
         cumulative_surfaces.copy_from_slice(result.as_slice());
         Ok(())
     }

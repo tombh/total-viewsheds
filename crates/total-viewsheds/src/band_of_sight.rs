@@ -50,6 +50,13 @@ use color_eyre::Result;
 const DIAGANOL_GREATER_THAN_WIDTH: f64 = core::f64::consts::SQRT_2;
 
 impl crate::dem::DEM {
+    /// The number of deltas in a single band.
+    pub const fn band_deltas_size(&self) -> u32 {
+        // We subtract one because there are always 1 fewer deltas in a set than there are actual
+        // items in the set.
+        self.band_size - 1
+    }
+
     /// These deltas apply to *all* possible bands in this sector.
     pub fn compile_band_data(&mut self) -> Result<()> {
         tracing::debug!("Calculating band deltas for {}°", self.axes.angle);
@@ -57,10 +64,7 @@ impl crate::dem::DEM {
         let mut dem_ids_to_compute = Vec::new();
         let mut distance_ids = Vec::new();
 
-        // We subtract one because there are always 1 fewer deltas in a set than there are actual
-        // items in the set.
-        let band_deltas_size = self.band_size - 1;
-        self.band_deltas = vec![0i32; usize::try_from(band_deltas_size)?];
+        self.band_deltas = vec![0i32; usize::try_from(self.band_deltas_size())?];
 
         // In order for the line of sight not to "slip through" DEM points because it's too thin,
         // we need to ensure a minimum density of points. I don't think this step is mentioned in
