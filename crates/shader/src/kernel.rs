@@ -18,20 +18,24 @@ const TAN_ONE_RAD: f32 = 0.017_453_3;
 const EARTH_RADIUS_SQUARED: f32 = 12_742_000.0;
 
 /// Constants that don't change for the entirety of the computation.
-#[expect(
-    clippy::exhaustive_structs,
-    reason = "We don't expect to be publishing this"
-)]
 #[repr(C)]
 #[cfg_attr(
     not(target_arch = "spirv"),
     derive(
-        Copy, Clone,
+        Copy, Clone, Default,
         // Bytemuck is what we use to cast data into raw bytes for CPU/GPU transfer.
         bytemuck::Zeroable, bytemuck::Pod,
     )
 )]
+#[expect(
+    clippy::exhaustive_structs,
+    clippy::pub_underscore_fields,
+    reason = "We're only sharing this in the workspace"
+)]
 pub struct Constants {
+    /// The number of invocations for each kernel dimensions. Needed to convert the dimensions into
+    /// a scalar kernetl ID.
+    pub dimensions: glam::UVec4,
     /// The total number of both forward and backward bands.
     pub total_bands: u32,
     /// The maximum distance that is expected to be possible. Units are the number of DEM points.
@@ -44,6 +48,10 @@ pub struct Constants {
     pub observer_height: f32,
     /// The amount of memory reserved for storing computed ring sectors.
     pub reserved_rings: u32,
+    /// Padding.
+    pub _pad0: u32,
+    /// Padding.
+    pub _pad1: u32,
 }
 
 /// The direction of a band from the observer's point of view. Whether it points North or South is

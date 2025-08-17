@@ -4,6 +4,12 @@ use wgpu::util::DeviceExt as _;
 
 use color_eyre::Result;
 
+/// Dimensions for the kernel. Used for workgroup sizes, dispatches and invocations.
+type Dimensions = (u32, u32, u32);
+
+/// Size of each kernel workgroup. MUST MATCH `compute(threads(8, 8, 4)` in the kernel.
+const KERNEL_WORKGROUPS: Dimensions = (8, 8, 4);
+
 /// Manage the Vulkan-enabled GPU.
 pub struct GPU {
     /// The GPU device.
@@ -12,11 +18,15 @@ pub struct GPU {
     queue: wgpu::Queue,
     /// The compiled SPIRV shader module.
     module: wgpu::ShaderModule,
+    /// Number of times to call each kernel workgroup.
+    dispatches: Dimensions,
+    /// The constants to send the GPU kernel.
+    constants: total_viewsheds_kernel::kernel::Constants,
 }
 
 impl GPU {
     /// Instantiate.
-    pub fn new() -> Result<Self> {
+    pub fn new(mut constants: total_viewsheds_kernel::kernel::Constants) -> Result<Self> {
         // We first initialize an wgpu `Instance`, which contains any "global" state wgpu needs.
         //
         // This is what loads the vulkan/dx12/metal/opengl libraries.
@@ -30,8 +40,11 @@ impl GPU {
         let adapter =
             pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
 
+        let limits = adapter.limits();
+        tracing::debug!("GPU limits: {limits:?}");
+
         // Print out some basic information about the adapter.
-        tracing::info!("Running on Adapter: {:#?}", adapter.get_info());
+        tracing::info!("Running on GPU adapter: {:#?}", adapter.get_info());
 
         // Check to see if the adapter supports compute shaders. While WebGPU guarantees support for
         // compute shaders, wgpu supports a wider range of devices through the use of "downlevel" devices.
@@ -48,7 +61,9 @@ impl GPU {
         // The `Device` is used to create and manage GPU resources.
         // The `Queue` is a queue used to submit work for the GPU to process.
         let required_limits = wgpu::Limits {
-            max_storage_buffers_per_shader_stage: 5, // or whatever you need
+            max_storage_buffers_per_shader_stage: 5,
+            max_storage_buffer_binding_size: 512_000_000,
+            max_compute_workgroups_per_dimension: 1024,
             ..wgpu::Limits::default()
         };
         let (device, queue) =
@@ -65,10 +80,23 @@ impl GPU {
             "../../shader/total_viewsheds_kernel.spv"
         ));
 
+        let required_invocations = constants.total_bands * 2;
+        let (dispatches, invocations) =
+            Self::find_dispatch_dimensions(required_invocations, KERNEL_WORKGROUPS)?;
+        constants.dimensions = [
+            invocations.0,
+            invocations.1,
+            invocations.2,
+            required_invocations,
+        ]
+        .into();
+
         let gpu = Self {
             device,
             queue,
             module,
+            dispatches,
+            constants,
         };
         Ok(gpu)
     }
@@ -78,7 +106,6 @@ impl GPU {
     // TODO: Don't recreate buffers and re-upload the distances for every sector angle.
     pub fn run(
         &self,
-        constants: total_viewsheds_kernel::kernel::Constants,
         elevations: &[f32],
         distances: &[f32],
         band_deltas: &[i32],
@@ -92,7 +119,7 @@ impl GPU {
             self.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
-                    contents: bytemuck::bytes_of(&constants),
+                    contents: bytemuck::bytes_of(&self.constants),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
 
@@ -123,7 +150,7 @@ impl GPU {
                     usage: wgpu::BufferUsages::STORAGE,
                 });
 
-        let output_surfaces_size = u64::from(constants.total_bands.div_euclid(2))
+        let output_surfaces_size = u64::from(self.constants.total_bands.div_euclid(2))
             * u64::try_from(std::mem::size_of::<f32>())?;
         let output_surfaces_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -313,18 +340,9 @@ impl GPU {
             timestamp_writes: None,
         });
 
-        // Set the pipeline that we want to use
         compute_pass.set_pipeline(&pipeline);
-        // Set the bind group that we want to use
         compute_pass.set_bind_group(0, &bind_group, &[]);
-
-        // Now we dispatch a series of workgroups. Each workgroup is a 3D grid of individual programs.
-        //
-        // We defined the workgroup size in the shader as 64x1x1. So in order to process all of our
-        // inputs, we ceiling divide the number of inputs by 64. If the user passes 32 inputs, we will
-        // dispatch 1 workgroups. If the user passes 65 inputs, we will dispatch 2 workgroups, etc.
-        let workgroup_count = (constants.total_bands * 2).div_ceil(64);
-        compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        compute_pass.dispatch_workgroups(self.dispatches.0, self.dispatches.1, self.dispatches.2);
 
         // Now we drop the compute pass, giving us access to the encoder again.
         drop(compute_pass);
@@ -378,5 +396,58 @@ impl GPU {
         let result: &[f32] = bytemuck::cast_slice(&data);
 
         Ok(result.to_vec())
+    }
+
+    /// Find a 3D kernel dispatch that balances all dimensions.
+    pub fn find_dispatch_dimensions(
+        total_invocations: u32,
+        workgroups: Dimensions,
+    ) -> Result<(Dimensions, Dimensions)> {
+        let max_tries = 1_000_000u32;
+        let mut dispatches = [0u32, 0, 0];
+        let mut invocations: Dimensions;
+        let mut total_invocations_generated;
+        for _ in 0..max_tries {
+            for dimension in 0..3 {
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "The loop range doesn't fall outside the arra size"
+                )]
+                {
+                    dispatches[dimension] += 1;
+                };
+
+                invocations = (
+                    dispatches[0] * workgroups.0,
+                    dispatches[1] * workgroups.1,
+                    dispatches[2] * workgroups.2,
+                );
+
+                total_invocations_generated = invocations.0 * invocations.1 * invocations.2;
+                if total_invocations_generated >= total_invocations {
+                    tracing::debug!(
+                    "Kernel dimensions (for {workgroups:?}). \
+                    Dispatches: {dispatches:?}. Invocations: {invocations:?} (total: {total_invocations_generated}, needed: {total_invocations} )"
+                );
+
+                    return Ok((dispatches.into(), invocations));
+                }
+            }
+        }
+
+        color_eyre::eyre::bail!("Couldn't find GPU dispatch dimensions");
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn find_dispatches() {
+        let (dispatches, invocations) =
+            GPU::find_dispatch_dimensions(1_000_000, KERNEL_WORKGROUPS).unwrap();
+        assert_eq!(dispatches, (16, 16, 16));
+        assert_eq!(invocations, (128, 128, 64));
     }
 }
