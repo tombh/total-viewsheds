@@ -15,7 +15,7 @@ glam = { version = "0.29", default-features = false, features = ["libm"] }
 
 # Dependencies for CPU code
 [target.'cfg(not(target_arch = "spirv"))'.dependencies]
-glam = { version = "0.29", features = ["std"] }
+glam = { version = "0.29", features = ["std", "bytemuck"] }
 bytemuck = "1.22.0"
 
 [package.metadata.rust-gpu.build]

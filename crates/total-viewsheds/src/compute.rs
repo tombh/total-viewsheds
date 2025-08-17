@@ -40,6 +40,7 @@ impl<'compute> Compute<'compute> {
             tvs_width: dem.tvs_width,
             observer_height: 1.8,
             reserved_rings: u32::try_from(rings_per_band)?,
+            ..Default::default()
         };
 
         let total_reserved_rings = usize::try_from(total_bands)? * rings_per_band;
@@ -49,7 +50,7 @@ impl<'compute> Compute<'compute> {
             reason = "The `?` is hard to use in the closure"
         )]
         let gpu = if matches!(method, crate::config::ComputeType::Vulkan) {
-            Some(super::gpu::GPU::new()?)
+            Some(super::gpu::GPU::new(constants)?)
         } else {
             None
         };
@@ -203,7 +204,6 @@ impl<'compute> Compute<'compute> {
         };
 
         let result = gpu.run(
-            self.constants,
             &self.dem.elevations,
             &self.dem.axes.distances,
             &self.dem.band_deltas,

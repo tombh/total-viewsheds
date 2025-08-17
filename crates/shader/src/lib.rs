@@ -13,8 +13,6 @@ use spirv_std::spirv;
 pub mod kernel;
 
 /// The main entrypoint to the shader.
-//
-// LocalSize/numthreads of (x = 64, y = 1, z = 1)
 #[allow(
     clippy::allow_attributes,
     reason = "For some reason `expect` doesn't detect the veracity of the 'inline' lint"
@@ -23,7 +21,7 @@ pub mod kernel;
     clippy::missing_inline_in_public_items,
     reason = "SPIR-V requires an entrypoint"
 )]
-#[spirv(compute(threads(64)))]
+#[spirv(compute(threads(8, 8, 4)))]
 pub fn main(
     #[spirv(global_invocation_id)] id: glam::UVec3,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] constants: &kernel::Constants,
@@ -33,8 +31,15 @@ pub fn main(
     #[spirv(storage_buffer, descriptor_set = 0, binding = 4)] cumulative_surfaces: &mut [f32],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 5)] ring_data: &mut [u32],
 ) {
+    let linear_id = id.x
+        + id.y * constants.dimensions.x
+        + id.z * constants.dimensions.x * constants.dimensions.y;
+    if linear_id >= constants.dimensions.w {
+        return;
+    }
+
     kernel::kernel(
-        id.x,
+        linear_id,
         constants,
         elevations,
         distances,

@@ -2,6 +2,9 @@
 
 /// `Config`
 #[derive(clap::Parser, Debug)]
+#[command(
+    about = "Generate _all_ the viewsheds for a given Digital Elevation Model, therefore the total viewsheds."
+)]
 pub struct Config {
     /// The input DEM file. Currently only `.hgt` files are supported.
     #[arg(long, value_name = "Path to the DEM file")]
