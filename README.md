@@ -19,9 +19,10 @@ There's also a new paper by the same author from 2021 that seems to focus more o
 
 ## Usage
 
-You will need a `.hgt` file. They can be downloaded in zip batches from: https://www.viewfinderpanoramas.org/Coverage%20map%20viewfinderpanoramas_org3.htm
+Currently only the [`.bt` file format](http://vterrain.org/Implementation/Formats/BT.html) is supported.
+The best source of elevation data I have found is here: https://www.viewfinderpanoramas.org/Coverage%20map%20viewfinderpanoramas_org3.htm It's mostly in the `.hgt` format, but can easily be converted to `.bt` using `gdal_translate`.
 
-Example: `RUST_LOG=debug cargo run -- --input N51W002.hgt`
+Example: `RUST_LOG=debug cargo run -- --input N51W002.bt`
 
 A heatmap of total viewshed surface areas will be saved to `./heatmap.png`. The path can be changed with `--output-dir path/to/dir`. Note that the same image file is updated for every sector angle, so you can watch the details improve as the computatioin progresses.
 

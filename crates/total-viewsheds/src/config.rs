@@ -9,6 +9,7 @@ pub struct Config {
     /// The input DEM file. Currently only `.hgt` files are supported.
     #[arg(long, value_name = "Path to the DEM file")]
     pub input: std::path::PathBuf,
+
     /// The maximum distance in metres to search for visible points. For a TVS calculation to be
     /// truly correct, it must have access to all the DEM data around it that may possibly be
     /// visible to it. However, the further the distances searched the exponentially greater the
@@ -16,6 +17,7 @@ pub struct Config {
     /// is 538km. Defaults to one third of the DEM width.
     #[arg(long, value_name = "The maximum expected line of sight in meters")]
     pub max_line_of_sight: Option<u32>,
+
     /// Size of each DEM point
     /// The maximum number of visible rings expected per km of band of sight. This is the number
     /// of times land may appear and disappear for an observer looking out into the distance. The
@@ -24,6 +26,7 @@ pub struct Config {
     /// unused RAM.
     #[arg(long, value_name = "Expected rings per km", default_value_t = 5.0)]
     pub rings_per_km: f32,
+
     /// The height of the observer in meters.
     #[arg(
         long,
@@ -31,6 +34,7 @@ pub struct Config {
         default_value = "1.65"
     )]
     pub observer_height: f32,
+
     /// Where to run the kernel calculations.
     #[arg(
         long,
@@ -39,9 +43,14 @@ pub struct Config {
         default_value_t = ComputeType::Vulkan
     )]
     pub compute: ComputeType,
+
     /// Path to save the heatmap of the total viewshed surfaces.
     #[arg(long, value_name = "Directory to save output to", default_value = "./")]
     pub output_dir: std::path::PathBuf,
+
+    /// Override the calculated DEM points scale from the DEM file. Units in meters.
+    #[arg(long, value_name = "DEM scale (meters)")]
+    pub scale: Option<f64>,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]

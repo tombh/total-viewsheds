@@ -84,10 +84,14 @@ impl Axes {
     pub fn compute(&mut self) {
         tracing::debug!("Calculating axes for {}°", self.angle);
 
+        tracing::trace!("Calculating all sight-ordered distances...");
         let distances = self.calculate_distances(self.angle);
+        tracing::trace!("Ordering all sight-ordered distances...");
         let sight_distances = self.order_by_distance(&distances);
+        tracing::trace!("Converting all sight-ordered distances to `f32`...");
         self.convert_distances_to_f32(&distances);
 
+        tracing::trace!("Populating sight-ordered distances to DEM ID map...");
         #[expect(
             clippy::as_conversions,
             clippy::indexing_slicing,
@@ -100,7 +104,9 @@ impl Axes {
             self.sight_ordered_map[dem_id_usize] = index;
         }
 
+        tracing::trace!("Calculating all sector-ordered distances...");
         let sector_distances = self.calculate_distances(self.angle + 90.0);
+        tracing::trace!("Ordering all sector-ordered distances...");
         self.sector_ordered = self.order_by_distance(&sector_distances);
     }
 

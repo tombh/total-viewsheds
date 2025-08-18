@@ -154,9 +154,7 @@ impl crate::dem::DEM {
             reason = "It's easier to read and panicking is appropriate as there's no way to recover"
         )]
         {
-            let pov_sector_id = distances_to_sector_ids_map[middle_of_whole_band];
-            let pov_dem_id = i32::try_from(dem_ids_to_compute[pov_sector_id])?;
-            let pov_distance = self.axes.distances[usize::try_from(pov_dem_id)?];
+            let pov_distance = self.axes.distances[pov_id];
             for (i, band_id) in (middle_of_whole_band..end_of_band).enumerate() {
                 let current_sector_id = distances_to_sector_ids_map[band_id];
                 let current_dem_id = i32::try_from(dem_ids_to_compute[current_sector_id])?;
