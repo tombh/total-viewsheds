@@ -94,7 +94,8 @@ impl GPU {
         // The `Queue` is a queue used to submit work for the GPU to process.
         let required_limits = wgpu::Limits {
             max_storage_buffers_per_shader_stage: 5,
-            max_storage_buffer_binding_size: 512_000_000,
+            max_storage_buffer_binding_size: 2_000_000_000,
+            max_buffer_size: 2_000_000_000,
             max_compute_workgroups_per_dimension: 1024,
             ..wgpu::Limits::default()
         };
@@ -169,6 +170,8 @@ impl GPU {
             output_surfaces_size,
             output_rings_size,
         };
+
+        tracing::trace!("GPU pipline ready.");
         Ok(gpu)
     }
 
@@ -181,6 +184,7 @@ impl GPU {
         band_deltas_size: u64,
         output_rings_size: u64,
     ) -> Result<(Buffers, wgpu::BindGroup)> {
+        tracing::trace!("Creating GPU buffers....");
         let input_constants_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Constants"),
             contents: bytemuck::bytes_of(&constants),
@@ -288,6 +292,7 @@ impl GPU {
             download_rings: download_rings_buffer,
         };
 
+        tracing::trace!("...GPU buffers created.");
         Ok((buffers, bind_group))
     }
 

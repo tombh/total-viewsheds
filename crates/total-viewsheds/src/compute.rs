@@ -43,7 +43,17 @@ impl<'compute> Compute<'compute> {
             ..Default::default()
         };
 
+        #[cfg(test)]
         let total_reserved_rings = usize::try_from(total_bands)? * rings_per_band;
+        #[expect(
+            clippy::cfg_not_test,
+            reason = "
+              No-op for now, it can be incredibly memory intensive, so we need to be explicit about
+              how we handle it.
+            "
+        )]
+        #[cfg(not(test))]
+        let total_reserved_rings = 1;
 
         #[expect(
             clippy::if_then_some_else_none,

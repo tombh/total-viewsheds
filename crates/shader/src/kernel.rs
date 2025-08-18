@@ -300,5 +300,10 @@ const fn delta_subtract(dem_id: usize, delta: i32) -> usize {
 )]
 /// Save ring data.
 fn save_ring_data(ring_data: &mut [u32], index: usize, pov_id: usize) {
-    ring_data[index] = pov_id as u32;
+    // No-op this for now, it's profoundly memory intensive.
+    // ring_data[index] = pov_id as u32;
+    #[cfg(not(target_arch = "spirv"))]
+    {
+        ring_data[index] = pov_id as u32;
+    }
 }
