@@ -65,6 +65,25 @@ pub struct Axes {
     pub sight_ordered_map: Vec<usize>,
 }
 
+/// Order by distance, but don't reorder the original data. Instead return the new indexes of
+/// the data if it were ordered.
+fn order_by_distance(distances: &[f64]) -> Vec<u32> {
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        reason = "i < distances.len() < u32::MAX, and distances should not be inf so 'as' is safe"
+    )]
+    let mut order = distances
+        .iter()
+        .enumerate()
+        .map(|(i, &distance)| (distance as f32, i as u32))
+        .collect::<Vec<(f32, u32)>>();
+
+    radsort::sort_by_key(&mut order, |(distance, _)| *distance);
+
+    order.iter().map(|(_, i)| *i).collect()
+}
+
 impl Axes {
     /// Instantiate.
     pub fn new(width: u32, angle: f32) -> Result<Self> {
@@ -87,7 +106,7 @@ impl Axes {
         tracing::trace!("Calculating all sight-ordered distances...");
         let distances = self.calculate_distances(self.angle);
         tracing::trace!("Ordering all sight-ordered distances...");
-        let sight_distances = self.order_by_distance(&distances);
+        let sight_distances = order_by_distance(&distances);
         tracing::trace!("Converting all sight-ordered distances to `f32`...");
         self.convert_distances_to_f32(&distances);
 
@@ -107,7 +126,7 @@ impl Axes {
         tracing::trace!("Calculating all sector-ordered distances...");
         let sector_distances = self.calculate_distances(self.angle + 90.0);
         tracing::trace!("Ordering all sector-ordered distances...");
-        self.sector_ordered = self.order_by_distance(&sector_distances);
+        self.sector_ordered = order_by_distance(&sector_distances);
     }
 
     /// Calculate distances of elevantion samples from a line like `ab`:
@@ -154,25 +173,6 @@ impl Axes {
         }
 
         distances
-    }
-
-    /// Order by distance, but don't reorder the original data. Instead return the new indexes of
-    /// the data if it were ordered.
-    fn order_by_distance(&self, distances: &[f64]) -> Vec<u32> {
-        let mut ordered: Vec<u32> = (0..self.width.pow(2)).collect();
-        #[expect(
-            clippy::indexing_slicing,
-            clippy::as_conversions,
-            reason = "We're sorting 2 vectors of the same size so out of bounds is impossible"
-        )]
-        ordered.sort_by(|&i, &j| {
-            let left = distances[i as usize];
-            let right = distances[j as usize];
-            left.partial_cmp(&right)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        ordered
     }
 
     #[expect(

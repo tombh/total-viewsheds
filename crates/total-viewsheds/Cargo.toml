@@ -16,6 +16,7 @@ total-viewsheds-kernel = { path = "../shader"}
 tracing = { version = "0.1.41" }
 tracing-subscriber = { version = "0.3.19", default-features = false, features = ["env-filter", "ansi"] }
 wgpu = { version = "25", features = ["spirv"] }
+radsort = "0.1.1"
 
 [dev-dependencies]
 tempfile = "3.20.0"
