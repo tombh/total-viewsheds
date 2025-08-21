@@ -12,6 +12,8 @@ mod config;
 mod dem;
 mod gpu;
 mod input;
+mod cuda;
+
 /// Various ways to output data.
 mod output {
     pub mod ascii;

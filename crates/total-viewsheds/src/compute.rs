@@ -22,6 +22,12 @@ pub struct Compute<'compute> {
     pub total_surfaces: Vec<f32>,
 }
 
+#[derive(Debug)]
+struct Angle {
+    deltas: Vec<i32>,
+    distances: Vec<f32>,
+}
+
 impl<'compute> Compute<'compute> {
     /// Instantiate.
     pub fn new(
@@ -97,8 +103,36 @@ impl<'compute> Compute<'compute> {
         (band_length_in_km * rings_per_km) as usize
     }
 
+
+    fn build_angle_cache(&mut self) -> Result<Vec<Angle>> {
+        let mut angles = vec![];
+        for angle in 0..crate::axes::SECTOR_STEPS {
+            self.load_or_compute_cache(angle)?;
+
+            angles.push(Angle{
+                deltas: self.dem.band_deltas.clone(),
+                distances: self.dem.band_distances.clone(),
+            })
+        }
+        Ok(angles)
+    }
+
+    fn compute_cuda(&mut self) -> Result<(Vec<f32>, Vec<Vec<u32>>)> {
+        let angles = self.build_angle_cache()?;
+
+
+
+
+        Ok((vec![], vec![]))
+    }
+
+
     /// Do alld computations.
     pub fn run(&mut self) -> Result<(Vec<f32>, Vec<Vec<u32>>)> {
+        if matches!(self.method, crate::config::ComputeType::Cuda) {
+            return self.compute_cuda()
+        }
+
         let mut cumulative_surfaces = vec![0.0; usize::try_from(self.dem.computable_points_count)?];
         self.total_surfaces.clone_from(&cumulative_surfaces);
         let mut all_ring_data = Vec::new();
