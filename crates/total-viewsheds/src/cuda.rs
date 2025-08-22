@@ -1,12 +1,14 @@
-
-
+use std::mem;
 use color_eyre::eyre::{ContextCompat as _, Result};
 
 use std::sync::Arc;
-use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, CudaStream, DriverError, LaunchConfig};
+use cudarc::driver::{CudaContext, CudaFunction, CudaSlice, CudaStream, DeviceSlice, DriverError, LaunchConfig};
 use cudarc::driver::PushKernelArg;
 use cudarc::nvrtc;
+use cudarc::runtime::result::{get_mem_info};
+use cudarc::runtime::result::device::free;
 use total_viewsheds_kernel::kernel::Constants;
+use crate::compute::Angle;
 use crate::dem::DEM;
 
 pub struct CudaKernel {
@@ -15,13 +17,12 @@ pub struct CudaKernel {
 
     angle_kernel: CudaFunction,
     max_kernel: CudaFunction,
-    angles: CudaSlice<f32>
 }
 
-
+const MB: usize = 1_000_000;
 
 impl CudaKernel {
-    pub fn new(bands: usize, deltas: usize) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let ctx = CudaContext::new(0)?;
 
         let angle_kernel: CudaFunction;
@@ -43,70 +44,133 @@ impl CudaKernel {
 
         let stream = ctx.default_stream();
 
-        let angles = stream.alloc_zeros::<f32>(bands*deltas)?;
-
         Ok(Self {
             ctx,
             stream,
             angle_kernel,
             max_kernel,
-            angles,
         })
     }
 
-    fn calculate_angles(&mut self, constants: &Constants, dem: &DEM, sums: &[i32], differences: &[i32]) -> Result<()> {
-        let mut launcher = self.stream.launch_builder(&self.angle_kernel);
+    fn calculate_angles(
+        &self,
+        forwards_deltas: &CudaSlice<i32>,
+        backward_deltas: &CudaSlice<i32>,
+        distances: &CudaSlice<f32>,
+        angle_buf: &CudaSlice<f32>,
+        n: usize
+    ) -> Result<()> {
 
-        let elevations = self.stream.memcpy_stod(&dem.elevations)?;
-        let distances = self.stream.memcpy_stod(&dem.axes.distances)?;
-        let deltas = self.stream.memcpy_stod(sums)?;
-        let differences = self.stream.memcpy_stod(differences)?;
+        tracing::debug!("Calculating angles for {}", n);
 
-        // launcher.arg(constants);
-        launcher.arg(&elevations);
-        launcher.arg(&distances);
-        launcher.arg(&deltas);
-        launcher.arg(&differences);
-        launcher.arg(&mut self.angles);
-
-        let num_grids = constants.total_bands/2;
-
-        let launch_config = LaunchConfig{
-            block_dim: (10, 100, 1),
-            grid_dim: (num_grids/10, 4, 1),
+        // TODO: this is extremely tuned for Everest, maybe make this a bit more general?
+        let launch_cfg = LaunchConfig {
+            block_dim: (1, 1000, 1),
+            grid_dim: (n as u32, 6, 1),
             shared_mem_bytes: 0,
         };
 
-        unsafe {
-            launcher.launch(launch_config)
-        }?;
-
+        //
+        assert_eq!(forwards_deltas.len() % (launch_cfg.block_dim.1 * launch_cfg.grid_dim.1) as usize, 0);
         Ok(())
     }
 
+    fn prefix_max() {}
 
-    pub fn line_of_sight(&mut self, constants: &Constants, dem: &DEM, sums: &[i32], differences: &[i32]) -> Result<Vec<i32>> {
-        self.calculate_angles(constants, dem, sums, differences)?;
+    pub fn line_of_sight(&self, constants: &Constants, angles: &[Angle], elevations: &[f32], cumulative_surfaces: usize) -> Result<Vec<f32>> {
+        let all_angles = struct_of_arrays(angles);
 
-        let result = self.stream.alloc_zeros::<i32>(constants.total_bands as usize)?;
-        let mut launcher = self.stream.launch_builder(&self.max_kernel);
-        // launcher.arg(constants);
-        launcher.arg(&self.angles);
-        launcher.arg(&result);
+        // allocate all the forward deltas/backward deltas, elevations, and the cumulative
+        // surfaces result
+        let forward_deltas = self.stream.memcpy_stod(&all_angles.forward_deltas)?;
+        let backward_deltas = self.stream.memcpy_stod(&all_angles.backward_deltas)?;
+        let distances = self.stream.memcpy_stod(&all_angles.distances)?;
 
-        let cfg = LaunchConfig{
-            block_dim: (1, 1, 1),
-            grid_dim: (constants.total_bands, 1, 1),
-            shared_mem_bytes: 0,
-        };
+        let elevations = self.stream.memcpy_stod(elevations)?;
+        let result = self.stream.alloc_zeros::<f32>(cumulative_surfaces)?;
 
-        unsafe {
-            launcher.launch(cfg)
-        }?;
+        // Use the above "overhead" to calculate about how much space we have left
+        // on the GPU so that we can use the maximum
+        let overhead = forward_deltas.num_bytes() + backward_deltas.num_bytes()
+            + distances.num_bytes() + elevations.num_bytes() + result.num_bytes();
 
-        let res = self.stream.memcpy_dtov(&result)?;
-        println!("{:?}", &res[1..10]);
+        tracing::debug!("data overhead: {}MB", overhead / MB);
 
-        Ok(res)
+        // we'll have |deltas| f32s, all future calculations are in bytes so we need size_of
+        let line_size = angles[0].forward_deltas.len() * size_of::<f32>();
+        tracing::debug!("line size: {}MB", line_size / 1000);
+
+        let (free_bytes, total) = get_mem_info()?;
+        tracing::debug!("{}MB free / {}MB total", (free_bytes-overhead)/MB, total/MB);
+
+        // allocate 7/8ths of the bytes left after reserving our overhead
+        // for angle calculations
+        let bytes_for_angles = ((free_bytes - overhead) * 7) / 8;
+
+        // figure out the maximum number of lines we could possibly have
+        let lines_in_buf = bytes_for_angles / (line_size*2);
+        tracing::debug!("number of concurrent lines: {}", bytes_for_angles / line_size);
+
+        let angle_buf_size = lines_in_buf *line_size;
+
+        let angle_buf = self.stream.alloc_zeros::<f32>(angle_buf_size / size_of::<f32>())?;
+        let prefix_max = self.stream.alloc_zeros::<f32>(angle_buf_size / size_of::<f32>())?;
+
+        tracing::debug!("leftover memory: {}B", bytes_for_angles-(angle_buf.num_bytes()*2));
+
+        let total_lines = crate::axes::SECTOR_STEPS as usize * constants.total_bands as usize;
+
+        let execution_count = total_lines.div_ceil(lines_in_buf);
+        tracing::debug!("total_lines: {}", total_lines);
+
+
+        for i in 0..execution_count {
+            let rest = total_lines-(lines_in_buf*i);
+            let n = if rest > lines_in_buf {
+                lines_in_buf
+            } else {
+                rest
+            };
+
+            self.calculate_angles(
+                &forward_deltas,
+                &backward_deltas,
+                &distances,
+                &angle_buf,
+                n
+            )?
+        }
+
+        Ok(self.stream.memcpy_dtov(&result)?)
     }
 }
+
+
+fn struct_of_arrays(angles: &[Angle]) -> Angle {
+    let forward = angles
+        .iter()
+        .map(|a| a.forward_deltas.clone())
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let backwards = angles
+        .iter()
+        .map(|a| a.backward_deltas.clone())
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let distances = angles
+        .iter()
+        .map(|a| a.distances.clone())
+        .flatten()
+        .collect::<Vec<_>>();
+
+    Angle {
+        forward_deltas: forward,
+        backward_deltas: backwards,
+        distances,
+    }
+}
+
+
+

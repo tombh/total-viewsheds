@@ -1,6 +1,8 @@
 //! The main entrypoint for running computations.
 
 use color_eyre::Result;
+use crate::cuda::{CudaKernel};
+use crate::gpu::GPU;
 
 /// Handles all the computations.
 pub struct Compute<'compute> {
@@ -23,9 +25,10 @@ pub struct Compute<'compute> {
 }
 
 #[derive(Debug)]
-struct Angle {
-    deltas: Vec<i32>,
-    distances: Vec<f32>,
+pub struct Angle {
+    pub forward_deltas: Vec<i32>,
+    pub backward_deltas: Vec<i32>,
+    pub distances: Vec<f32>,
 }
 
 impl<'compute> Compute<'compute> {
@@ -109,21 +112,43 @@ impl<'compute> Compute<'compute> {
         for angle in 0..crate::axes::SECTOR_STEPS {
             self.load_or_compute_cache(angle)?;
 
+            let mut forward_deltas = vec![0; self.dem.band_deltas.len()];
+            let mut backward_deltas = vec![0; self.dem.band_deltas.len()];
+
+            let mut sum = 0;
+            let mut diff = 0;
+
+            for (i, delta) in self.dem.band_deltas.iter().enumerate() {
+                sum += delta;
+                diff -= delta;
+
+                forward_deltas[i] = sum;
+                backward_deltas[i] = diff;
+            }
+
+
             angles.push(Angle{
-                deltas: self.dem.band_deltas.clone(),
+                forward_deltas,
+                backward_deltas,
                 distances: self.dem.band_distances.clone(),
             })
         }
+
         Ok(angles)
     }
 
     fn compute_cuda(&mut self) -> Result<(Vec<f32>, Vec<Vec<u32>>)> {
         let angles = self.build_angle_cache()?;
 
+        let kernel = CudaKernel::new()?;
+        let heatmap = kernel.line_of_sight(
+            &self.constants,
+            &angles,
+            &self.dem.elevations,
+            self.dem.computable_points_count as usize,
+        )?;
 
-
-
-        Ok((vec![], vec![]))
+        Ok((heatmap, vec![]))
     }
 
 
