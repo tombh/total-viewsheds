@@ -1,15 +1,26 @@
-
+#include <cub/block/block_scan.cuh>
 
 typedef struct {
+    unsigned int angles;
     unsigned int total_bands;
     unsigned int max_los_as_points;
     unsigned int dem_width;
     unsigned int tvs_width;
     float observer_height;
-    unsigned int reserved_rings;
 } calculation_constants;
 
 #define EARTH_RADIUS_SQUARED 12742000.0
+
+#define TOTAL_BANDS 72000000
+#define TVS_WIDTH 6000
+#define MAX_LOS_POINTS 6000
+
+#define BLOCK_SIZE 6
+
+#define TAN_ONE_RAD 0.0174533
+
+#define ull unsigned long long
+
 
 extern "C" __global__ void angle_kernel(
     // Constants for the calculations.
@@ -32,35 +43,75 @@ extern "C" __global__ void angle_kernel(
     //           memory accesses?
     const unsigned int* __restrict__ delta_pos,
     const unsigned int* __restrict__ delta_neg,
-    float* result
+    float* result,
+    int offset
 ) {
-    int half_total_bands = constants.total_bands/2;
+    // line_num tells us what (kernel_id, angle) we are at
+    ull line_num = offset + blockIdx.x;
 
-    int tvs_id = ((blockDim.x*blockIdx.x)+threadIdx.x) % half_total_bands;
+//     printf("line_num: %d\n", line_num);
 
-    bool forward = tvs_id < half_total_bands;
+    ull tvs_id = line_num % TOTAL_BANDS;
+    ull angle = line_num / TOTAL_BANDS;
 
-    int pov_x = (tvs_id % constants.tvs_width) + constants.max_los_as_points;
-    int pov_y = (tvs_id / constants.tvs_width) + constants.max_los_as_points;
+    // determine whether we are forwards or backwards facing
+    // TODO: this doesn't seem to "fall out" of the implementation
+    ull half_total_bands = TOTAL_BANDS/2;
+
+    bool forward = tvs_id > half_total_bands;
+    if (forward) {
+        tvs_id -= half_total_bands;
+    }
+
+    ull pov_x = (tvs_id % TVS_WIDTH) + MAX_LOS_POINTS;
+    ull pov_y = (tvs_id / TVS_WIDTH) + MAX_LOS_POINTS;
 
     // get the dem id for our pov which is where we start our calculation
-    int pov_id = (pov_x * constants.dem_width) + pov_y;
+    ull pov_id = (pov_x * constants.dem_width) + pov_y;
 
     // calculate he height
-    float pov_elevation = elevations[pov_id] + constants.observer_height;
-    float pov_distance = distances[pov_id];
+    const float pov_elevation = elevations[pov_id] + constants.observer_height;
 
-    int delta = forward ? delta_pos[threadIdx.y]
-                        : -delta_neg[threadIdx.y];
 
-    int dem_id = pov_id + delta;
+    float angle_buf[BLOCK_SIZE];
+    float prefix_max[BLOCK_SIZE];
+    float distance[BLOCK_SIZE];
 
-    float elevation_delta = elevations[dem_id] - pov_elevation;
-    float distance_delta = fabs(distances[dem_id] - pov_distance);
+    int delta_index_start = (angle*MAX_LOS_POINTS) + threadIdx.x*BLOCK_SIZE;
 
-    int absolute_pov_idx = blockDim.x * blockIdx.x * blockDim.y;
-    int index = blockDim.x * blockIdx.x * blockDim.y
-        + threadIdx.y * blockDim.x + threadIdx.x;
+    #pragma unroll
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+        int delta = forward ? delta_pos[delta_index_start+i]
+                            : -delta_neg[delta_index_start+i];
 
-    result[index] = (elevation_delta/distance_delta);
+        distance[i] = distances[delta_index_start + i];
+
+        ull dem_id = pov_id + delta;
+
+        float elevation_delta = elevations[dem_id] - pov_elevation;
+        angle_buf[i] = elevation_delta / distance[i];
+    }
+
+    __syncthreads();
+
+    using BlockScan = cub::BlockScan<float, 1000>;
+    __shared__ typename BlockScan::TempStorage temp_storage;
+
+    BlockScan(temp_storage)
+        .InclusiveScan(angle_buf, prefix_max, cuda::maximum<>{});
+
+
+    float sum = 0.0;
+
+    #pragma unroll
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+        if (angle_buf[i] >= prefix_max[i]) {
+            sum += distance[i] * TAN_ONE_RAD;
+        }
+    }
+
+
+    if (sum > 0.0) {
+        atomicAdd(&result[tvs_id], sum);
+    }
 }

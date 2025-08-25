@@ -20,7 +20,7 @@ pub mod kernel;
     clippy::missing_inline_in_public_items,
     reason = "SPIR-V requires an entrypoint"
 )]
-#[spirv(compute(threads(8, 8, 4)))]
+#[spirv(compute(threads(1024)))]
 pub fn main(
     #[spirv(global_invocation_id)] id: glam::UVec3,
     #[spirv(uniform, descriptor_set = 0, binding = 0)] constants: &kernel::Constants,

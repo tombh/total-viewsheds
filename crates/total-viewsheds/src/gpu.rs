@@ -97,6 +97,8 @@ impl GPU {
             max_storage_buffer_binding_size: 2_000_000_000,
             max_buffer_size: 2_000_000_000,
             max_compute_workgroups_per_dimension: 1024,
+            max_compute_workgroup_size_x: 1024,
+            max_compute_invocations_per_workgroup: 1024,
             ..wgpu::Limits::default()
         };
         let (device, queue) =

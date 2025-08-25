@@ -28,7 +28,7 @@ pub struct Compute<'compute> {
 pub struct Angle {
     pub forward_deltas: Vec<i32>,
     pub backward_deltas: Vec<i32>,
-    pub distances: Vec<f32>,
+    pub band_distances: Vec<f32>,
 }
 
 impl<'compute> Compute<'compute> {
@@ -127,10 +127,11 @@ impl<'compute> Compute<'compute> {
             }
 
 
+            // TODO: make forward distances and backward distances for parallel computation
             angles.push(Angle{
                 forward_deltas,
                 backward_deltas,
-                distances: self.dem.band_distances.clone(),
+                band_distances: self.dem.band_distances.clone(),
             })
         }
 
@@ -155,7 +156,11 @@ impl<'compute> Compute<'compute> {
     /// Do alld computations.
     pub fn run(&mut self) -> Result<(Vec<f32>, Vec<Vec<u32>>)> {
         if matches!(self.method, crate::config::ComputeType::Cuda) {
-            return self.compute_cuda()
+            let (heatmap, _) = self.compute_cuda()?;
+            self.total_surfaces = heatmap.clone();
+            self.render_total_surfaces()?;
+
+            return Ok((heatmap, vec![]))
         }
 
         let mut cumulative_surfaces = vec![0.0; usize::try_from(self.dem.computable_points_count)?];
